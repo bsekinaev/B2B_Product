@@ -1,0 +1,56 @@
+
+# B2B Product Content Generator
+
+Сервис подготовки B2B-карточек контрольно-измерительных приборов
+с использованием GigaChat API.
+
+Разрабатывается в рамках технического задания компании «СОЮЗ-ПРИБОР».
+
+## Быстрый старт
+
+Требуется Python 3.12.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Документация API: http://127.0.0.1:8000/docs
+
+## Конфигурация
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Укажите Authorization key GigaChat в `GIGACHAT_CREDENTIALS`.
+
+При необходимости настройте доверенный сертификат через
+`GIGACHAT_CA_BUNDLE_FILE`. Проверка TLS обязательна.
+
+Проверка подключения:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.check_gigachat_access
+```
+
+Секреты и локальные сертификаты исключены из Git.
+
+## Проверки
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+```
+
+## API
+
+`GET /health` — проверка работоспособности приложения.
+
+```json
+{"status": "ok"}
+```
+
+Генерация карточек пока не реализована.
