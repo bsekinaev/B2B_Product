@@ -53,7 +53,7 @@ def offline_description(product: ProductInput) -> str:
     """Имитировать нужную длину без дополнительных технических утверждений."""
     facts = [product.name, product.manufacturer, product.description or ""]
     facts.extend(f"{key}: {value}" for key, value in product.specs.items())
-    segment = "; ".join(facts).replace(".", ";").strip() + "; "
+    segment = "; ".join(facts).strip() + "; "
     return (segment * (850 // len(segment) + 2))[:850]
 
 

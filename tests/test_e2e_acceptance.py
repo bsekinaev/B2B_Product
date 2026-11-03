@@ -231,3 +231,13 @@ def test_prompt_injection_cannot_make_unstructured_guarantee_evidence() -> None:
     assert result["status"] == "requires_revision"
     assert any("гарантия" in warning for warning in result["warnings"])
     assert result["card"]["specifications"] == product["specs"]
+
+
+def test_offline_description_preserves_dotted_model_identifiers() -> None:
+    from scripts.run_acceptance import offline_description
+
+    product = ProductInput.model_validate(load_product("thermometer"))
+    description = offline_description(product)
+
+    assert "БТ-51.211" in description
+    assert "G1/2.100.1,5" in description
