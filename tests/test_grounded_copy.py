@@ -138,3 +138,43 @@ def test_known_unverified_benefits_are_flagged(dm02: ProductInput) -> None:
     )
     assert result.status == GenerationStatus.REQUIRES_REVISION
     assert any("преимущества" in warning for warning in result.warnings)
+
+
+def test_preserve_good_model_description_when_commercial_note_missing(dm02: ProductInput) -> None:
+    original = grounded_seo_description(dm02)
+    assert original is not None
+
+    class Provider:
+        def generate_text(self, **_kwargs: Any) -> str:
+            return json.dumps(
+                {
+                    "seo_title": dm02.name,
+                    "seo_description": original,
+                    "search_queries": [
+                        "манометр DM 02",
+                        "манометр Манотомь",
+                        "манометр 0–1,6 МПа",
+                    ],
+                    "commercial_note": "",
+                },
+                ensure_ascii=False,
+            )
+
+    result = generate_card(dm02, Provider())  # type: ignore[arg-type]
+    assert result.status == GenerationStatus.READY_FOR_REVIEW
+    assert result.card.seo_description == original
+    assert result.card.commercial_note
+
+
+def test_second_product_from_manufacturer_facts_can_be_formatted() -> None:
+    path = Path(__file__).resolve().parents[1] / "examples/products/thermometer.json"
+    product = ProductInput.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    assert product.manufacturer == "РОСМА"
+    assert "БТ-51.211" in product.name
+    assert product.specs["диапазон измерения"] == "0–100 °C"
+    assert product.specs["диаметр корпуса"] == "100 мм"
+    description = grounded_seo_description(product)
+    assert description is not None
+    assert 800 <= len(description) <= 1200
+    for value in product.specs.values():
+        assert value in description

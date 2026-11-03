@@ -73,7 +73,12 @@ def _repair_incomplete_commercial_draft(
         return result
     if (result.card.commercial_note or "").strip():
         return result
-    description = grounded_seo_description(product)
+    current_description = (result.card.seo_description or "").strip()
+    description = (
+        result.card.seo_description
+        if SEO_DESCRIPTION_MIN <= len(current_description) <= SEO_DESCRIPTION_MAX
+        else grounded_seo_description(product)
+    )
     if description is None:
         return result
 

@@ -36,9 +36,11 @@ Copy-Item .env.example .env
 ## Генерация карточки
 
 `POST /generate` принимает JSON с полями `name`, `manufacturer`, `specs`,
-`description`. Пример в `examples/products/manometer.json`; второй условный
-демонстрационный товар — в `examples/products/thermometer.json`.
-**Это примеры входных данных, а не паспортные сведения проверенных изделий.**
+`description`. Первый пример — `examples/products/manometer.json` (DM 02 из PDF задания).
+Второй пример — `examples/products/thermometer.json`: БТ-51.211 «РОСМА»,
+маркировка и параметры проверены по [документации производителя](https://rosma.spb.ru/termometers/seriya_211_obschetehnicheskie_tylnoe/).
+Это иллюстративный выбор, **не второй набор данных, полученный от работодателя**.
+Ни один пример не является подтверждением доступности товара или его текущей цены.
 
 В другом окне PowerShell при запущенном API:
 
