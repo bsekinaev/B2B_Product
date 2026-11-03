@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from app.grounded_copy import grounded_commercial_note, grounded_seo_description
 from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
 from app.llm.prompts import (
     DRAFT_RESPONSE_FORMAT,
@@ -57,6 +58,35 @@ def parse_model_json(raw: str) -> GeneratedText:
         return GeneratedText.model_validate(content)
     except (ValueError, TypeError, ValidationError):
         raise LLMError(LLMErrorCode.BAD_RESPONSE) from None
+
+
+def _repair_incomplete_commercial_draft(
+    product: ProductInput, result: GenerationResult, missing: list[str]
+) -> GenerationResult:
+    """Восстановить пустой commercial-блок и короткий текст из исходных фактов.
+
+    Не пытаемся выдавать модельное предположение за проверенную характеристику.
+    Применяется только для черновика с пустым коммерческим блоком и при наличии
+    как минимум трёх заполненных параметров. Иначе сохраняется requires_revision.
+    """
+    if result.status != GenerationStatus.REQUIRES_REVISION:
+        return result
+    if (result.card.commercial_note or "").strip():
+        return result
+    description = grounded_seo_description(product)
+    if description is None:
+        return result
+
+    revised = result.card.model_copy(
+        update={
+            "seo_description": description,
+            "commercial_note": grounded_commercial_note(product),
+        }
+    )
+    validated = validate_generated_card(product, revised, missing_fields=missing)
+    # Если карточка всё ещё требует исправления, сохраняем содержательный
+    # проверяемый текст, но не скрываем замечания других проверок.
+    return validated
 
 
 def generate_card(product: ProductInput, provider: GigaChatProvider) -> GenerationResult:
@@ -112,7 +142,7 @@ def generate_card(product: ProductInput, provider: GigaChatProvider) -> Generati
         or sum(bool(value) for value in product.specs.values()) < 3
         or not product.description
     ):
-        return first
+        return _repair_incomplete_commercial_draft(product, first, missing)
 
     try:
         revised_raw = provider.generate_text(
@@ -123,11 +153,11 @@ def generate_card(product: ProductInput, provider: GigaChatProvider) -> Generati
         revised = parse_model_json(revised_raw)
     except LLMError:
         # Первый корректный черновик остаётся доступен даже при сбое доработки.
-        return first
+        return _repair_incomplete_commercial_draft(product, first, missing)
 
     revised_length = len(revised.seo_description.strip())
     if not first_length < revised_length <= SEO_DESCRIPTION_MAX:
-        return first
+        return _repair_incomplete_commercial_draft(product, first, missing)
 
     revised_card = ProductCard(
         seo_title=revised.seo_title,
@@ -141,5 +171,5 @@ def generate_card(product: ProductInput, provider: GigaChatProvider) -> Generati
     # Не выбирать более длинный ответ ценой новых ошибок или рекламных
     # обещаний. Полноценную смысловую достоверность проверяет редактор.
     if set(candidate.warnings) - set(first.warnings):
-        return first
-    return candidate
+        return _repair_incomplete_commercial_draft(product, first, missing)
+    return _repair_incomplete_commercial_draft(product, candidate, missing)

@@ -41,6 +41,19 @@ async def read_product_request(request: Request) -> ProductInput:
 
     try:
         return ProductInput.model_validate(data)
-    except ValidationError:
-        # Не возвращать входные values (в том числе возможные секреты) в 422.
-        raise HTTPException(status_code=422, detail={"code": "invalid_product"}) from None
+    except ValidationError as exc:
+        # Сообщаем только известные имена обязательных полей.
+        # Не включаем значения пользователя и произвольные названия характеристик.
+        missing_fields = sorted(
+            {
+                error["loc"][0]
+                for error in exc.errors()
+                if error.get("type") in {"missing", "string_too_short"}
+                and error.get("loc")
+                and error["loc"][0] in {"name", "manufacturer"}
+            }
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_product", "missing_fields": missing_fields},
+        ) from None
