@@ -33,3 +33,6 @@ Thumbs.db
 
 # Local acceptance reports (may contain input and generated content)
 artifacts/
+
+# Unreviewed live-generated examples
+examples/results/
