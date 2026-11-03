@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from app.grounded_commercial import grounded_commercial_note
 from app.grounded_copy import grounded_seo_description
 from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
 from app.llm.prompts import (
@@ -84,13 +85,7 @@ def _complete_commercial_note(
     if not product.description or sum(bool(x) for x in product.specs.values()) < 3:
         return result
 
-    note = (
-        "Для специалистов по закупке и подбору оборудования: "
-        f"«{product.name}» ({product.manufacturer}) можно сравнивать "
-        "по указанным в карточке техническим характеристикам. "
-        "Перед заказом следует сопоставить их с требованиями заявки "
-        "и уточнить отсутствующие сведения по технической документации."
-    )
+    note = grounded_commercial_note(product, list(product.specs)[:3])
     updated = result.card.model_copy(update={"commercial_note": note})
     return validate_generated_card(product, updated, missing_fields=missing)
 
@@ -242,12 +237,7 @@ def generate_card(
     if len({" ".join(q.split()).casefold() for q in queries}) != 3:
         return result
 
-    selection = ", ".join(relevant_names[:3])
-    commercial = (
-        f"Для закупки «{product.name}» сравните параметры: "
-        f"{selection}. Требуемое исполнение следует проверить "
-        "по технической документации перед оформлением заказа."
-    )
+    commercial = grounded_commercial_note(product, relevant_names[:3])
 
     card = ProductCard(
         seo_title=title,

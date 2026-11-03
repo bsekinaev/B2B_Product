@@ -1,0 +1,39 @@
+{
+  "purpose": "Два самостоятельных примера для демонстрации MVP",
+  "provided_by_employer": false,
+  "generation_method": "gigachat_recorded_response_with_grounded_fallback",
+  "runtime": "offline_replay",
+  "human_review_required": true,
+  "note": "Результаты прошли формальные проверки, но не являются подтверждением полной смысловой достоверности.",
+  "cases": [
+    {
+      "id": "meter_dm02_series",
+      "input_file": "products/meter_dm02_series.json",
+      "output_file": "results/meter_dm02_series.json",
+      "catalog_reference": "https://www.meter.ru/catalog/manometry/manometri-obshhetehnicheskie/meter-dm-02",
+      "seo_description_length": 1131,
+      "status": "ready_for_review",
+      "review": "human_review_required"
+    },
+    {
+      "id": "rosma_bt_51_211",
+      "input_file": "products/rosma_bt_51_211.json",
+      "output_file": "results/rosma_bt_51_211.json",
+      "catalog_reference": "https://rosma.spb.ru/termometers/seriya_211_obschetehnicheskie_tylnoe/",
+      "seo_description_length": 1063,
+      "status": "ready_for_review",
+      "review": "human_review_required"
+    }
+  ],
+  "editorial_regeneration": {
+    "date": "2026-11-03",
+    "version": "0.1.1",
+    "method": "offline_fake_provider_and_deterministic_fallback",
+    "giga_chat_api_calls": 0,
+    "fields_changed": [
+      "card.commercial_note"
+    ],
+    "description": "Коммерческие блоки повторно сформированы локально через generate_card с подменённым LLM-провайдером. Провайдер возвращал короткое SEO-описание и неподтверждённую гарантию, что приводило к детерминированному fallback. Новых ответов GigaChat на данном этапе не получали.",
+    "human_review_required": true
+  }
+}

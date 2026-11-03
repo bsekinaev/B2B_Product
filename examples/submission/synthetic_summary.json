@@ -1,0 +1,19 @@
+{
+  "count": 24,
+  "passed": 24,
+  "failed": 0,
+  "by_group": {
+    "blank": 2,
+    "empty": 2,
+    "invalid": 2,
+    "rich": 10,
+    "sparse": 6,
+    "unsafe": 2
+  },
+  "by_status": {
+    "insufficient_data": 2,
+    "ready_for_review": 10,
+    "requires_revision": 12
+  },
+  "note": "Все товары вымышлены. Все ответы LLM подменены. Успешный отказ также считается PASS. Это не проверка качества реального GigaChat."
+}
