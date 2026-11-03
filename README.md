@@ -67,3 +67,15 @@ Copy-Item .env.example .env
 данных товара — 16 КиБ (не размер исходного HTTP-запроса).
 
 Проверки SEO-текста и маршрут `POST /generate` будут добавлены позднее.
+
+## GigaChat Provider
+
+`app/llm/client.py` изолирует вызов SDK, проверяет наличие ключа и
+доверенного CA-файла, отклоняет неполные ответы модели и возвращает
+текст или безопасный код ошибки.
+Повторы сетевых запросов выполняет только SDK (`GIGACHAT_MAX_RETRIES`).
+Ручной smoke-тест текстовой генерации (реальный запрос к API):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.check_gigachat_completion
+```
