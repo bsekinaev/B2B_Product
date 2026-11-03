@@ -17,6 +17,7 @@ SEARCH_QUERIES_MIN = 3
 SEARCH_QUERIES_MAX = 5
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+_SLEEVE_IP = re.compile(r"гильз\w*[^.!?\n]{0,45}\bIP\d{2}\b", re.I)
 _WORD = re.compile(r"[^\W\d_]{4,}", re.UNICODE)
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
@@ -24,7 +25,9 @@ _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 # обнаружить в тексте без языковой модели. Это не полноценный фактчекинг.
 _RISKY_CLAIMS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
-        re.compile(r"\bГОСТ\b|\bТУ\b|\bISO\b|сертифик|сертифиц|аттест|госреестр|соответств", re.I),
+        re.compile(
+            r"\bГОСТ\b|\bТУ\b|\bISO\b|сертифик|сертифиц|аттест|госреестр|\bсоответствует\b", re.I
+        ),
         "В тексте упомянуты неподтверждённые стандарты или сертификаты",
     ),
     (re.compile(r"гарант", re.I), "В тексте заявлена неподтверждённая гарантия"),
@@ -42,8 +45,9 @@ _RISKY_CLAIMS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(
-            r"высокоточн|повышенн.{0,12}точност|надёжн|долговечн|"
-            r"лабораторн|труднодоступн|для.{0,12}точн.{0,15}измерен",
+            r"высокоточн|повышенн.{0,12}точност|над[её]жн|долговечн|высок[а-я]{0,10}\s+точност|"
+            r"лабораторн|труднодоступн|для.{0,12}точн.{0,15}измерен|"
+            r"оперативн.{0,30}отслежива|обеспечива.{0,30}над[её]жн",
             re.I,
         ),
         "В тексте заявлены неподтверждённые преимущества или области применения",
@@ -201,6 +205,16 @@ def validate_generated_card(
     for pattern, message in _RISKY_CLAIMS:
         if pattern.search(generated) and not pattern.search(structured_evidence):
             warnings.append(message)
+
+    casing_rating = any(
+        "корпус" in name.casefold() and "защит" in name.casefold() for name in product.specs
+    )
+    sleeve_rating = any(
+        "гильз" in name.casefold() and ("степен" in name.casefold() or "ip" in name.casefold())
+        for name in product.specs
+    )
+    if casing_rating and not sleeve_rating and _SLEEVE_IP.search(generated):
+        warnings.append("Степень защиты корпуса ошибочно приписана гильзе")
 
     # Отсутствие структурированных технических фактов важнее SEO-формата.
     if not has_specs:
