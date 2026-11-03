@@ -6,9 +6,14 @@ from copy import deepcopy
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
-from app.llm.prompts import DRAFT_RESPONSE_FORMAT, SYSTEM_PROMPT, build_user_prompt
+from app.llm.prompts import (
+    DRAFT_RESPONSE_FORMAT,
+    SYSTEM_PROMPT,
+    build_refinement_prompt,
+    build_user_prompt,
+)
 from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
-from app.validation import validate_generated_card
+from app.validation import SEO_DESCRIPTION_MAX, SEO_DESCRIPTION_MIN, validate_generated_card
 
 
 class GeneratedText(BaseModel):
@@ -96,4 +101,45 @@ def generate_card(product: ProductInput, provider: GigaChatProvider) -> Generati
         commercial_note=generated.commercial_note,
         specifications=specifications,
     )
-    return validate_generated_card(product, card, missing_fields=missing)
+    first = validate_generated_card(product, card, missing_fields=missing)
+
+    # Один ограниченный редакторский повтор, но только когда есть материал
+    # для расширения. Он НЕ является повтором сетевой ошибки SDK.
+    first_length = len((card.seo_description or "").strip())
+    if (
+        first.status != GenerationStatus.REQUIRES_REVISION
+        or first_length >= SEO_DESCRIPTION_MIN
+        or sum(bool(value) for value in product.specs.values()) < 3
+        or not product.description
+    ):
+        return first
+
+    try:
+        revised_raw = provider.generate_text(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=build_refinement_prompt(product, first_length),
+            response_format=deepcopy(DRAFT_RESPONSE_FORMAT),
+        )
+        revised = parse_model_json(revised_raw)
+    except LLMError:
+        # Первый корректный черновик остаётся доступен даже при сбое доработки.
+        return first
+
+    revised_length = len(revised.seo_description.strip())
+    if not first_length < revised_length <= SEO_DESCRIPTION_MAX:
+        return first
+
+    revised_card = ProductCard(
+        seo_title=revised.seo_title,
+        seo_description=revised.seo_description,
+        search_queries=revised.search_queries,
+        commercial_note=revised.commercial_note,
+        specifications=specifications,
+    )
+    candidate = validate_generated_card(product, revised_card, missing_fields=missing)
+
+    # Не выбирать более длинный ответ ценой новых ошибок или рекламных
+    # обещаний. Полноценную смысловую достоверность проверяет редактор.
+    if set(candidate.warnings) - set(first.warnings):
+        return first
+    return candidate

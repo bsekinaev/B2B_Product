@@ -70,6 +70,22 @@ def _original_facts(product: ProductInput) -> str:
     )
 
 
+def _structured_risk_evidence(product: ProductInput) -> str:
+    """Свободный description не подтверждает гарантии/сертификаты/условия поставки.
+
+    Инструкции и рекламные обещания в произвольном описании не должны
+    автоматически легализовать те же утверждения в тексте LLM.
+    Поддержка по структуре всё равно не заменяет проверку человеком.
+    """
+    return "\n".join(
+        [
+            product.name,
+            product.manufacturer,
+            *(f"{name}: {value}" for name, value in product.specs.items()),
+        ]
+    )
+
+
 def _source_numbers(text: str) -> set[str]:
     return {match.replace(",", ".") for match in _NUMBER.findall(text)}
 
@@ -173,8 +189,9 @@ def validate_generated_card(
     if extra_numbers:
         warnings.append("В тексте есть числа, отсутствующие в исходных данных")
 
+    structured_evidence = _structured_risk_evidence(product)
     for pattern, message in _RISKY_CLAIMS:
-        if pattern.search(generated) and not pattern.search(source):
+        if pattern.search(generated) and not pattern.search(structured_evidence):
             warnings.append(message)
 
     # Отсутствие структурированных технических фактов важнее SEO-формата.
