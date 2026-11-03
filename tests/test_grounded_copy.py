@@ -107,6 +107,7 @@ def test_two_incomplete_fields_need_revision_without_enough_facts() -> None:
 
 def test_absent_required_fields_are_listed_without_values() -> None:
     from fastapi.testclient import TestClient
+
     from app.main import app
 
     with TestClient(app) as client:
