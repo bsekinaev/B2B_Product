@@ -170,3 +170,49 @@ def test_model_invalid_json_is_revision_not_http_500(api: tuple[TestClient, Fake
     assert response.status_code == 200
     assert response.json()["status"] == "requires_revision"
     assert response.json()["card"]["specifications"] == input_product()["specs"]
+
+
+def test_http_generate_ready_for_manual_review_only_after_validation(
+    api: tuple[TestClient, FakeProvider],
+) -> None:
+    client, provider = api
+    phrase = "Манометр предназначен для измерения избыточного давления; "
+    provider.answer = json.dumps(
+        {
+            "seo_title": "Манометр DM 02 — характеристики",
+            "seo_description": (phrase * 20)[:850],
+            "search_queries": ["манометр DM 02", "манометр Манотомь", "манометр 0–1,6 МПа"],
+            "commercial_note": "Для контроля избыточного давления",
+        },
+        ensure_ascii=False,
+    )
+    response = client.post("/generate", json=input_product())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready_for_review"
+    assert data["warnings"] == []
+    assert data["card"]["specifications"] == input_product()["specs"]
+
+
+def test_http_generate_short_description_requires_revision(
+    api: tuple[TestClient, FakeProvider],
+) -> None:
+    client, _ = api
+    response = client.post("/generate", json=input_product())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "requires_revision"
+    assert any("SEO-описание" in warning for warning in data["warnings"])
+
+
+def test_http_generate_description_only_is_insufficient_data(
+    api: tuple[TestClient, FakeProvider],
+) -> None:
+    client, _ = api
+    request = {"name": "Манометр", "manufacturer": "Завод", "description": "Измерение давления"}
+    response = client.post("/generate", json=request)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "insufficient_data"
+    assert "specs" in data["missing_fields"]
+    assert data["card"]["specifications"] == {}

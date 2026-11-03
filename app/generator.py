@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
 from app.llm.prompts import DRAFT_RESPONSE_FORMAT, SYSTEM_PROMPT, build_user_prompt
 from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
+from app.validation import validate_generated_card
 
 
 class GeneratedText(BaseModel):
@@ -54,7 +55,7 @@ def parse_model_json(raw: str) -> GeneratedText:
 
 
 def generate_card(product: ProductInput, provider: GigaChatProvider) -> GenerationResult:
-    """Собрать черновик; окончательную оценку качества даст этап 5."""
+    """Собрать черновик и провести независимую проверку качества."""
     specifications = dict(product.specs)
     missing = [f"specs.{name}" for name, value in product.specs.items() if not value]
     card = ProductCard(specifications=specifications)
@@ -95,9 +96,4 @@ def generate_card(product: ProductInput, provider: GigaChatProvider) -> Generati
         commercial_note=generated.commercial_note,
         specifications=specifications,
     )
-    return GenerationResult(
-        status=GenerationStatus.REQUIRES_REVISION,
-        card=card,
-        missing_fields=missing,
-        warnings=["Черновик ожидает проверки SEO и достоверности на этапе валидации"],
-    )
+    return validate_generated_card(product, card, missing_fields=missing)
