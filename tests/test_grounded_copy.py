@@ -64,9 +64,7 @@ def test_seo_from_source_facts_is_within_limits(dm02: ProductInput) -> None:
 
 
 def test_no_grounded_text_when_not_enough_specifications() -> None:
-    product = ProductInput(
-        name="Прибор", manufacturer="Завод", specs={"тип": "механический"}
-    )
+    product = ProductInput(name="Прибор", manufacturer="Завод", specs={"тип": "механический"})
     assert grounded_seo_description(product) is None
 
 
