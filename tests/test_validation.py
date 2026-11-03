@@ -268,3 +268,37 @@ def test_generator_with_unsupported_number_requires_revision() -> None:
     result = generate_card(product, _StaticProvider(draft))  # type: ignore[arg-type]
     assert result.status is GenerationStatus.REQUIRES_REVISION
     assert any("числа" in warning for warning in result.warnings)
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "Высокоточный прибор",
+        "Повышенная точность измерений",
+        "Надёжность конструкции",
+        "Долговечность эксплуатации",
+        "Подходит для лабораторных исследований",
+        "Измерения в труднодоступных местах",
+    ],
+)
+def test_unverified_marketing_claims_require_revision(claim: str) -> None:
+    result = validate_generated_card(source(), card(commercial_note=claim))
+    assert result.status is GenerationStatus.REQUIRES_REVISION
+    assert any("преимущества" in warning for warning in result.warnings)
+
+
+def test_structured_source_can_support_laboratory_use() -> None:
+    product = source(
+        specs={
+            **source().specs,
+            "назначение": "лабораторные исследования",
+        }
+    )
+    result = validate_generated_card(
+        product,
+        card(
+            commercial_note="Для лабораторных исследований",
+            specifications=product.specs,
+        ),
+    )
+    assert result.status is GenerationStatus.READY_FOR_REVIEW
