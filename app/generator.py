@@ -1,0 +1,103 @@
+"""Сборка черновика B2B-карточки без передачи характеристик под контроль LLM."""
+
+import json
+from copy import deepcopy
+
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
+from app.llm.prompts import DRAFT_RESPONSE_FORMAT, SYSTEM_PROMPT, build_user_prompt
+from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
+
+
+class GeneratedText(BaseModel):
+    """Только текстовые поля модели; статус и технические факты сюда не входят."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    seo_title: str
+    seo_description: str
+    search_queries: list[str]
+    commercial_note: str
+
+
+class DuplicateJSONKey(ValueError):
+    """JSON не должен молча терять более раннее значение повторного ключа."""
+
+
+def unique_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Защитить JSON, включая вложенные объекты, от совпадающих ключей."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise DuplicateJSONKey("Repeated JSON key")
+        result[key] = value
+    return result
+
+
+def reject_json_constant(value: str) -> None:
+    """Не принимать нестандартные JSON-числа NaN и Infinity."""
+    raise ValueError("Invalid JSON numeric constant")
+
+
+def parse_model_json(raw: str) -> GeneratedText:
+    """Разобрать ответ модели строго, без Markdown-fence и лишних полей."""
+    try:
+        content = json.loads(
+            raw,
+            object_pairs_hook=unique_json_keys,
+            parse_constant=reject_json_constant,
+        )
+        return GeneratedText.model_validate(content)
+    except (ValueError, TypeError, ValidationError):
+        raise LLMError(LLMErrorCode.BAD_RESPONSE) from None
+
+
+def generate_card(product: ProductInput, provider: GigaChatProvider) -> GenerationResult:
+    """Собрать черновик; окончательную оценку качества даст этап 5."""
+    specifications = dict(product.specs)
+    missing = [f"specs.{name}" for name, value in product.specs.items() if not value]
+    card = ProductCard(specifications=specifications)
+
+    # Совсем без технических сведений генерация длинного SEO-текста недостоверна.
+    if not any(value for value in product.specs.values()) and not product.description:
+        missing.extend(["specs", "description"])
+        return GenerationResult(
+            status=GenerationStatus.INSUFFICIENT_DATA,
+            card=card,
+            missing_fields=sorted(set(missing)),
+            warnings=["Недостаточно исходных сведений для достоверной генерации"],
+        )
+
+    response = provider.generate_text(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=build_user_prompt(product),
+        response_format=deepcopy(DRAFT_RESPONSE_FORMAT),
+    )
+
+    # Ошибочный или оборванный JSON не подменяется вымышленным текстом.
+    try:
+        generated = parse_model_json(response)
+    except LLMError as exc:
+        if exc.code != LLMErrorCode.BAD_RESPONSE:
+            raise
+        return GenerationResult(
+            status=GenerationStatus.REQUIRES_REVISION,
+            card=card,
+            missing_fields=missing,
+            warnings=["Модель вернула некорректный структурированный ответ"],
+        )
+
+    card = ProductCard(
+        seo_title=generated.seo_title,
+        seo_description=generated.seo_description,
+        search_queries=generated.search_queries,
+        commercial_note=generated.commercial_note,
+        specifications=specifications,
+    )
+    return GenerationResult(
+        status=GenerationStatus.REQUIRES_REVISION,
+        card=card,
+        missing_fields=missing,
+        warnings=["Черновик ожидает проверки SEO и достоверности на этапе валидации"],
+    )

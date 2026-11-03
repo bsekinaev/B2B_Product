@@ -103,3 +103,28 @@ def test_retry_limit_rejected(
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+@pytest.mark.parametrize(
+    "unsafe_url",
+    [
+        "http://api.giga.chat/v1",
+        "https://evil.example/v1",
+        "https://api.giga.chat.evil.example/v1",
+        "https://api.giga.chat@evil.example/v1",
+        "https://api.giga.chat:9443/v1",
+        "https://api.giga.chat/v2",
+        "https://api.giga.chat/v1?token=test",
+        "https://api.giga.chat/v1/",
+    ],
+)
+def test_gigachat_base_url_rejects_unsafe_or_unknown_hosts(unsafe_url: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, gigachat_base_url=unsafe_url)
+
+
+def test_gigachat_output_token_budget_is_bounded() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.gigachat_max_output_tokens == 1400
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, gigachat_max_output_tokens=100_000)

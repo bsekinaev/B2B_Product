@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     gigachat_model: str = "GigaChat-2"
     gigachat_base_url: str = "https://api.giga.chat/v1"
+    gigachat_max_output_tokens: int = Field(default=1400, ge=512, le=4096)
 
     gigachat_timeout: float = Field(
         default=30.0,
@@ -47,4 +48,12 @@ class Settings(BaseSettings):
         """Не допускать отключения проверки TLS-сертификатов."""
         if not value:
             raise ValueError("TLS certificate verification must remain enabled")
+        return value
+
+    @field_validator("gigachat_base_url")
+    @classmethod
+    def require_official_gigachat_url(cls, value: str) -> str:
+        """Не передавать Authorization key на произвольный HTTP(S)-сервер."""
+        if value != "https://api.giga.chat/v1":
+            raise ValueError("Use the official GigaChat HTTPS v1 API endpoint")
         return value

@@ -4,6 +4,7 @@ import ssl
 from enum import StrEnum
 from json import JSONDecodeError
 from pathlib import Path
+from typing import Any
 
 import httpx
 from gigachat import GigaChat
@@ -52,7 +53,13 @@ class GigaChatProvider:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def generate_text(self, *, system_prompt: str, user_prompt: str) -> str:
+    def generate_text(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
         """Получить непустой текст ответа, не раскрывая детали ошибок SDK."""
         if (
             not isinstance(system_prompt, str)
@@ -74,13 +81,17 @@ class GigaChatProvider:
             raise LLMError(LLMErrorCode.CONFIGURATION)
 
         try:
-            request = Chat(
-                messages=[
+            request_options: dict[str, Any] = {
+                "messages": [
                     Messages(role=MessagesRole.SYSTEM, content=system_prompt),
                     Messages(role=MessagesRole.USER, content=user_prompt),
                 ],
-                temperature=0.2,
-            )
+                "temperature": 0.2,
+                "max_tokens": settings.gigachat_max_output_tokens,
+            }
+            if response_format is not None:
+                request_options["response_format"] = response_format
+            request = Chat(**request_options)
         except (ValidationError, TypeError, ValueError):
             raise LLMError(LLMErrorCode.INVALID_REQUEST) from None
 

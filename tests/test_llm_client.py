@@ -307,3 +307,19 @@ def test_invalid_ca_bundle_ssl_error_is_sanitized(
     assert raised.value.code == LLMErrorCode.CONFIGURATION
     assert "SECRET_CERTIFICATE_DETAILS" not in str(raised.value)
     assert raised.value.__cause__ is None
+
+
+def test_structured_request_sets_response_format_and_bounded_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sdk = FakeSDK()
+    monkeypatch.setattr(llm_module, "GigaChat", sdk.factory)
+    schema = {"type": "json_schema", "schema": {"type": "object"}, "strict": True}
+    GigaChatProvider(make_settings()).generate_text(
+        system_prompt="Правила", user_prompt="Товар", response_format=schema
+    )
+    request = sdk.requests[0]
+    assert request.max_tokens == 1400
+    assert (
+        request.response_format.model_dump(mode="json", by_alias=True, exclude_none=True) == schema
+    )
