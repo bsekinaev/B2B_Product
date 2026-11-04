@@ -97,7 +97,52 @@ def grounded_seo_description(product: ProductInput) -> str | None:
 
     description = "\n\n".join(paragraphs)
 
-    if not SEO_DESCRIPTION_MIN <= len(description) <= SEO_DESCRIPTION_MAX:
-        return None
+    if SEO_DESCRIPTION_MIN <= len(description) <= SEO_DESCRIPTION_MAX:
+        return description
 
-    return description
+    # Если превышен лимит, сокращаем редакторские пояснения,
+    # но сохраняем исходные технические характеристики.
+    if len(description) > SEO_DESCRIPTION_MAX:
+        shorter = paragraphs.copy()
+
+        if is_series:
+            shorter[-1] = (
+                "Параметры с пометкой «варианты серии» относятся "
+                "к разным исполнениям. Конкретную модификацию "
+                "необходимо выбрать по технической документации."
+            )
+        else:
+            shorter[-1] = (
+                "Перед заказом следует проверить параметры "
+                "конкретного исполнения по технической документации."
+            )
+
+        shorter_description = "\n\n".join(shorter)
+
+        if SEO_DESCRIPTION_MIN <= len(shorter_description) <= SEO_DESCRIPTION_MAX:
+            return shorter_description
+
+        # Для особенно насыщенных источников пробуем компактную
+        # запись без удаления названий и значений характеристик.
+        compact = [f"{introduction}."]
+
+        if purpose and len(purpose) <= 220:
+            compact[0] += f" {purpose}."
+
+        facts = "; ".join(f"{name} — {value}" for name, value in entries)
+        compact.append(f"Характеристики: {facts}.")
+
+        if is_series:
+            compact.append(
+                "Указаны варианты серии. Перед заказом необходимо "
+                "выбрать конкретную модификацию по документации."
+            )
+        else:
+            compact.append("Перед заказом необходимо проверить параметры конкретного исполнения.")
+
+        compact_description = "\n\n".join(compact)
+
+        if SEO_DESCRIPTION_MIN <= len(compact_description) <= SEO_DESCRIPTION_MAX:
+            return compact_description
+
+    return None

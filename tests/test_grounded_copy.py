@@ -1,6 +1,7 @@
 """Регрессионные проверки сборки SEO из исходных параметров."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -152,3 +153,37 @@ def test_commercial_prioritizes_selection_parameters(
 
     assert result.status == GenerationStatus.READY_FOR_REVIEW
     assert expected_parameter in (result.card.commercial_note or "")
+
+
+def test_dense_owen_2trm0_fallback_keeps_all_facts() -> None:
+    path = Path(__file__).resolve().parents[1] / "examples/live_batch/products/owen_2trm0.json"
+    item = ProductInput.model_validate_json(path.read_text(encoding="utf-8"))
+
+    description = grounded_seo_description(item)
+
+    assert description is not None
+    assert 800 <= len(description) <= 1200
+
+    for name, value in item.specs.items():
+        assert f"{name} — {value}" in description
+
+    assert "RS-485, зависит от исполнения" in description
+
+    provider = ShortProvider(item)
+    result = generate_card(item, provider)
+
+    assert provider.calls == 2
+    assert result.status == GenerationStatus.READY_FOR_REVIEW
+    assert result.warnings == []
+    assert result.card.specifications == item.specs
+
+
+def test_overfull_grounded_description_is_not_truncated() -> None:
+    item = ProductInput(
+        name="Тестовый прибор",
+        manufacturer="Тестовый завод",
+        specs={f"параметр {index}": "значение " + "А" * 180 for index in range(10)},
+        description="Тестовое оборудование.",
+    )
+
+    assert grounded_seo_description(item) is None
