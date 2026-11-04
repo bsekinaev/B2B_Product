@@ -184,3 +184,11 @@ def test_manifest_rejects_duplicate_ids(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Duplicate"):
         load_manifest(root)
+
+
+def test_optional_rs485_is_not_claimed_for_all_variants() -> None:
+    items = {item.identifier: item for item in load_manifest(ROOT)}
+
+    for identifier in ("owen_2trm0", "owen_2trm1"):
+        value = items[identifier].product.specs["интерфейс связи"]
+        assert value == "RS-485, зависит от исполнения"
