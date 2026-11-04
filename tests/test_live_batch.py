@@ -189,7 +189,7 @@ def test_manifest_rejects_duplicate_ids(tmp_path: Path) -> None:
 def test_optional_rs485_is_not_claimed_for_all_variants() -> None:
     items = {item.identifier: item for item in load_manifest(ROOT)}
 
-    for identifier in ("owen_2trm0", "owen_2trm1"):
+    for identifier in ("owen_2trm0", "owen_trm1", "owen_2trm1", "owen_trm10", "owen_trm12"):
         value = items[identifier].product.specs["интерфейс связи"]
         assert value == "RS-485, зависит от исполнения"
 
@@ -352,3 +352,28 @@ def test_retry_preview_does_not_use_network(
     directory = root / "artifacts/live_batch"
     assert not (directory / "sample_meter.attempt-002.json").exists()
     assert not (directory / "sample_meter.attempt-002.started.json").exists()
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    ["owen_2trm1", "owen_trm10", "owen_trm12"],
+)
+def test_new_owen_products_separate_mounting_types(
+    identifier: str,
+) -> None:
+    items = {item.identifier: item for item in load_manifest(ROOT)}
+    specs = items[identifier].product.specs
+
+    assert specs["исполнения корпуса"] == (
+        "щитовой Щ1 / Щ2 / Щ5 / настенный Н / DIN-реечный Д, варианты серии"
+    )
+    assert specs["интерфейс связи"] == ("RS-485, зависит от исполнения")
+
+
+def test_owen_2trm1_describes_output_types() -> None:
+    items = {item.identifier: item for item in load_manifest(ROOT)}
+    specs = items["owen_2trm1"].product.specs
+
+    assert "типы выходных устройств" in specs
+    assert specs["количество выходных устройств"] == "2"
+    assert "выходные устройства" not in specs
