@@ -41,5 +41,5 @@ def test_openapi_schema_available() -> None:
     schema = response.json()
 
     assert schema["info"]["title"] == "B2B Product Content Generator"
-    assert schema["info"]["version"] == "0.1.0"
+    assert schema["info"]["version"] == app.version
     assert "/health" in schema["paths"]
