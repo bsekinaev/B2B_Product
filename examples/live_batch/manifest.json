@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "goal": 20,
+  "items": [
+    {
+      "id": "meter_dm02_series",
+      "input_file": "examples/submission/products/meter_dm02_series.json",
+      "catalog_reference": "https://www.meter.ru/catalog/manometry/manometri-obshhetehnicheskie/meter-dm-02",
+      "source_scope": "series"
+    },
+    {
+      "id": "rosma_bt_51_211",
+      "input_file": "examples/submission/products/rosma_bt_51_211.json",
+      "catalog_reference": "https://rosma.spb.ru/termometers/seriya_211_obschetehnicheskie_tylnoe/",
+      "source_scope": "configured_variant"
+    }
+  ]
+}
