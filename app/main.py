@@ -1,5 +1,7 @@
 """Точка входа HTTP API."""
 
+from importlib.metadata import version as package_version
+
 from fastapi import FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
@@ -12,7 +14,7 @@ from app.schemas import GenerationResult, ProductInput
 app = FastAPI(
     title="B2B Product Content Generator",
     description="Подготовка черновиков карточек технических товаров.",
-    version="0.1.0",
+    version=package_version("b2b-product-content-generator"),
 )
 
 
