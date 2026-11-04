@@ -120,6 +120,52 @@ def _product_keywords(product: ProductInput) -> set[str]:
     return {token.casefold() for token in _WORD.findall(product.name)}
 
 
+_RS485_PATTERN = re.compile(
+    r"(?<!\w)RS[\s\-‐‑‒–—]*485(?!\w)",
+    re.IGNORECASE,
+)
+
+_RS485_CONDITION = re.compile(
+    r"зависит\s+от\s+(?:исполнения|модификации)"
+    r"|в\s+зависимости\s+от\s+(?:исполнения|модификации)"
+    r"|(?:в|только\s+в)\s+(?:некоторых|отдельных)"
+    r"\s+(?:исполнениях|модификациях)"
+    r"|не\s+во\s+всех\s+(?:исполнениях|модификациях)"
+    r"|опциональн\w*",
+    re.IGNORECASE,
+)
+
+
+def _optional_rs485_warnings(
+    product: ProductInput,
+    card: ProductCard,
+) -> list[str]:
+    """Не разрешать безусловное RS-485 для условного исполнения."""
+    optional = any(
+        "интерфейс" in name.casefold()
+        and _RS485_PATTERN.search(value)
+        and "зависит от исполнения" in value.casefold()
+        for name, value in product.specs.items()
+    )
+
+    if not optional:
+        return []
+
+    fields = [
+        card.seo_title or "",
+        card.seo_description or "",
+        *card.search_queries,
+        card.commercial_note or "",
+    ]
+
+    for field in fields:
+        for sentence in re.split(r"[.!?;\n]+", field):
+            if _RS485_PATTERN.search(sentence) and not _RS485_CONDITION.search(sentence):
+                return ["RS-485 указан без ограничения по исполнению"]
+
+    return []
+
+
 def validate_generated_card(
     product: ProductInput,
     card: ProductCard,
@@ -204,6 +250,7 @@ def validate_generated_card(
 
     # Число из другой характеристики не подтверждает техническое утверждение.
     warnings.extend(specification_claim_warnings(product, generated))
+    warnings.extend(_optional_rs485_warnings(product, card))
 
     structured_evidence = _structured_risk_evidence(product)
     for pattern, message in _RISKY_CLAIMS:
