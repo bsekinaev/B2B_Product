@@ -96,9 +96,12 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
     missing = [f"specs.{name}" for name, value in product.specs.items() if not value]
     card = ProductCard(specifications=specifications)
 
-    # Совсем без технических сведений генерация длинного SEO-текста недостоверна.
-    if not any(value for value in product.specs.values()) and not product.description:
-        missing.extend(["specs", "description"])
+    # Без заполненных характеристик генерация недостоверна.
+    # Описание само по себе не оправдывает обращение к LLM.
+    if not any(value for value in product.specs.values()):
+        missing.append("specs")
+        if not product.description:
+            missing.append("description")
         return GenerationResult(
             status=GenerationStatus.INSUFFICIENT_DATA,
             card=card,
