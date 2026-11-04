@@ -9,6 +9,7 @@ import re
 from collections.abc import Iterable
 
 from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
+from app.spec_claims import specification_claim_warnings
 
 SEO_TITLE_MAX = 70
 SEO_DESCRIPTION_MIN = 800
@@ -200,6 +201,9 @@ def validate_generated_card(
     extra_numbers = _source_numbers(generated) - _source_numbers(source)
     if extra_numbers:
         warnings.append("В тексте есть числа, отсутствующие в исходных данных")
+
+    # Число из другой характеристики не подтверждает техническое утверждение.
+    warnings.extend(specification_claim_warnings(product, generated))
 
     structured_evidence = _structured_risk_evidence(product)
     for pattern, message in _RISKY_CLAIMS:
