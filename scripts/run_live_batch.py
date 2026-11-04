@@ -149,6 +149,43 @@ def save_record(path: Path, record: dict[str, Any]) -> None:
         stream.write("\n")
 
 
+def _prepare_retry(
+    items: list[BatchItem],
+    root: Path,
+    identifier: str,
+) -> BatchItem:
+    """Разрешить одну новую попытку только после сохранённой неудачи."""
+    selected = [item for item in items if item.identifier == identifier]
+
+    if len(selected) != 1:
+        raise ValueError("Retry ID not found in manifest")
+
+    item = selected[0]
+    output = root / OUTPUT
+    original = output / f"{identifier}.json"
+    retry = output / f"{identifier}.attempt-002.json"
+    started = output / f"{identifier}.attempt-002.started.json"
+
+    if not original.is_file():
+        raise ValueError("Original attempt is missing")
+
+    previous = json.loads(original.read_text(encoding="utf-8"))
+
+    if previous.get("id") != identifier:
+        raise ValueError("Original attempt ID mismatch")
+
+    if previous.get("input_sha256") != item.input_sha256:
+        raise ValueError("Product changed after original attempt")
+
+    if previous.get("content_quality") != "FAIL":
+        raise ValueError("Retry requires a failed original attempt")
+
+    if retry.exists() or started.exists():
+        raise ValueError("Retry already exists or was started")
+
+    return item
+
+
 def run_batch(
     items: list[BatchItem],
     *,
@@ -156,6 +193,7 @@ def run_batch(
     max_items: int = 2,
     client_factory: Any = TestClient,
     provider_factory: Any = GigaChatProvider,
+    retry_id: str | None = None,
 ) -> int:
     """Выполнять последовательные HTTP-запросы, сохраняя результат каждого."""
     if not 1 <= max_items <= 3:
@@ -164,9 +202,18 @@ def run_batch(
     output = root / OUTPUT
     submitted = 0
 
+    if retry_id is not None:
+        if max_items != 1:
+            raise ValueError("Retry requires max_items=1")
+        items = [_prepare_retry(items, root, retry_id)]
+
     with client_factory(api.app) as client:
         for item in items:
-            target = output / f"{item.identifier}.json"
+            target = (
+                output / f"{item.identifier}.attempt-002.json"
+                if retry_id is not None
+                else output / f"{item.identifier}.json"
+            )
 
             if target.exists():
                 saved = json.loads(target.read_text(encoding="utf-8"))
@@ -180,6 +227,17 @@ def run_batch(
             if submitted >= max_items:
                 break
 
+            if retry_id is not None:
+                save_record(
+                    output / f"{item.identifier}.attempt-002.started.json",
+                    {
+                        "id": item.identifier,
+                        "attempt_number": 2,
+                        "input_sha256": item.input_sha256,
+                        "state": "started",
+                    },
+                )
+
             trace: dict[str, Any] = {"calls": 0, "seo_texts": []}
             real_payload = item.product.model_dump(mode="json")
 
@@ -192,6 +250,10 @@ def run_batch(
                 "product": real_payload,
                 "human_review_required": True,
             }
+
+            if retry_id is not None:
+                record["attempt_number"] = 2
+                record["previous_attempt_file"] = f"{item.identifier}.json"
 
             def factory(
                 settings: Any,
@@ -295,10 +357,17 @@ def main(
 
     parser.add_argument("--confirm-live", action="store_true")
     parser.add_argument("--max-items", type=int, default=2)
+    parser.add_argument("--retry-id", default=None)
     args = parser.parse_args(argv)
 
     if not 1 <= args.max_items <= 3:
         parser.error("--max-items must be between 1 and 3")
+
+    if args.retry_id is not None:
+        if not IDENTIFIER.fullmatch(args.retry_id):
+            parser.error("--retry-id has invalid format")
+        if args.max_items != 1:
+            parser.error("--retry-id requires --max-items 1")
 
     try:
         items = load_manifest(root)
@@ -309,6 +378,15 @@ def main(
     print(f"MANIFEST: {len(items)}/20")
 
     if not args.confirm_live:
+        if args.retry_id is not None:
+            try:
+                _prepare_retry(items, root, args.retry_id)
+            except (OSError, ValueError, TypeError):
+                print("RETRY PREFLIGHT: FAIL")
+                return 1
+            print(f"DRY RUN RETRY: {args.retry_id}; attempt=002")
+            print("NETWORK: DISABLED")
+            return 0
         for item in items:
             print(f"DRY RUN: {item.identifier} ({item.source_scope})")
         print("NETWORK: DISABLED")
@@ -318,7 +396,12 @@ def main(
     print("MAX LOGICAL LLM CALLS:", args.max_items * 2)
 
     try:
-        return run_batch(items, root=root, max_items=args.max_items)
+        return run_batch(
+            items,
+            root=root,
+            max_items=args.max_items,
+            retry_id=args.retry_id,
+        )
     except (OSError, ValueError, TypeError):
         print("BATCH: FAIL (local state requires inspection)")
         return 1

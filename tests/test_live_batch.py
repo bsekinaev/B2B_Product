@@ -192,3 +192,163 @@ def test_optional_rs485_is_not_claimed_for_all_variants() -> None:
     for identifier in ("owen_2trm0", "owen_2trm1"):
         value = items[identifier].product.specs["интерфейс связи"]
         assert value == "RS-485, зависит от исполнения"
+
+
+def test_retry_preserves_original_and_saves_second_attempt(
+    tmp_path: Path,
+) -> None:
+    root = make_root(tmp_path)
+    items = load_manifest(root)
+
+    assert (
+        run_batch(
+            items,
+            root=root,
+            provider_factory=lambda _settings: FakeProvider(short=True),
+        )
+        == 2
+    )
+
+    directory = root / "artifacts/live_batch"
+    original = directory / "sample_meter.json"
+    preserved = original.read_bytes()
+
+    assert (
+        run_batch(
+            items,
+            root=root,
+            max_items=1,
+            retry_id="sample_meter",
+            provider_factory=lambda _settings: FakeProvider(),
+        )
+        == 0
+    )
+
+    second = directory / "sample_meter.attempt-002.json"
+    started = directory / "sample_meter.attempt-002.started.json"
+
+    assert original.read_bytes() == preserved
+    assert started.is_file()
+
+    record = json.loads(second.read_text(encoding="utf-8"))
+
+    assert record["attempt_number"] == 2
+    assert record["previous_attempt_file"] == "sample_meter.json"
+    assert record["content_quality"] == "PASS"
+
+    with pytest.raises(ValueError, match="already exists"):
+        run_batch(
+            items,
+            root=root,
+            max_items=1,
+            retry_id="sample_meter",
+        )
+
+
+def test_retry_rejects_successful_original(tmp_path: Path) -> None:
+    root = make_root(tmp_path)
+    items = load_manifest(root)
+
+    assert (
+        run_batch(
+            items,
+            root=root,
+            provider_factory=lambda _settings: FakeProvider(),
+        )
+        == 0
+    )
+
+    with pytest.raises(ValueError, match="failed original"):
+        run_batch(
+            items,
+            root=root,
+            max_items=1,
+            retry_id="sample_meter",
+        )
+
+
+def test_retry_rejects_changed_input(tmp_path: Path) -> None:
+    root = make_root(tmp_path)
+    items = load_manifest(root)
+
+    assert (
+        run_batch(
+            items,
+            root=root,
+            provider_factory=lambda _settings: FakeProvider(short=True),
+        )
+        == 2
+    )
+
+    path = root / "examples/live_batch/products/sample_meter.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["description"] = "Уточнённое назначение."
+    path.write_text(
+        json.dumps(data, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    changed_items = load_manifest(root)
+
+    with pytest.raises(ValueError, match="changed"):
+        run_batch(
+            changed_items,
+            root=root,
+            max_items=1,
+            retry_id="sample_meter",
+        )
+
+
+def test_retry_rejects_missing_original(tmp_path: Path) -> None:
+    root = make_root(tmp_path)
+
+    with pytest.raises(ValueError, match="missing"):
+        run_batch(
+            load_manifest(root),
+            root=root,
+            max_items=1,
+            retry_id="sample_meter",
+        )
+
+
+def test_retry_requires_one_item_limit(tmp_path: Path) -> None:
+    root = make_root(tmp_path)
+
+    with pytest.raises(ValueError, match="max_items=1"):
+        run_batch(
+            load_manifest(root),
+            root=root,
+            max_items=2,
+            retry_id="sample_meter",
+        )
+
+
+def test_retry_preview_does_not_use_network(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = make_root(tmp_path)
+    items = load_manifest(root)
+
+    assert (
+        run_batch(
+            items,
+            root=root,
+            provider_factory=lambda _settings: FakeProvider(short=True),
+        )
+        == 2
+    )
+
+    assert (
+        main(
+            ["--retry-id", "sample_meter", "--max-items", "1"],
+            root=root,
+        )
+        == 0
+    )
+
+    assert "NETWORK: DISABLED" in capsys.readouterr().out
+
+    directory = root / "artifacts/live_batch"
+    assert not (directory / "sample_meter.attempt-002.json").exists()
+    assert not (directory / "sample_meter.attempt-002.started.json").exists()
