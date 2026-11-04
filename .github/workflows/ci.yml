@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
 concurrency:
   group: b2b-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -29,10 +33,10 @@ jobs:
 
     steps:
       - name: Получить исходный код
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Подготовить Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
 
