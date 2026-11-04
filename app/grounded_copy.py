@@ -17,15 +17,22 @@ def grounded_seo_description(product: ProductInput) -> str | None:
     for name, value in entries:
         normalized = name.casefold()
 
-        if any(
+        # Типы выходных устройств не относятся к измерительным режимам.
+        if normalized in {"тип", "серия"} or any(
             term in normalized
             for term in (
-                "тип",
-                "серия",
                 "диапазон",
                 "класс точности",
                 "единицы шкалы",
                 "чувствительный элемент",
+                "погрешност",
+                "время опроса",
+                "время измерения",
+                "количество измерительных",
+                "количество универсальных входов",
+                "количество универсальных измерительных входов",
+                "количество каналов",
+                "входные сигналы",
             )
         ):
             groups[0].append((name, value))
@@ -37,6 +44,8 @@ def grounded_seo_description(product: ProductInput) -> str | None:
                 "резьба",
                 "присоединение",
                 "длина погружной",
+                "габариты",
+                "исполнения корпуса",
             )
         ):
             groups[1].append((name, value))
@@ -60,13 +69,25 @@ def grounded_seo_description(product: ProductInput) -> str | None:
     intro = f"{introduction}. "
     if purpose and len(purpose) <= 220:
         intro += f"{purpose}. "
-    intro += "При подборе параметры прибора сверяют с требованиями точки установки."
+    intro += "При выборе исполнения учитывают исходные характеристики и требования к подключению."
     paragraphs = [intro]
 
+    # Не называем параметры механического манометра электрическими.
+    extra_names = " ".join(name.casefold() for name, _ in groups[2])
+    electrical = any(
+        term in extra_names
+        for term in ("питание", "напряжение", "частота", "интерфейс", "протокол")
+    )
+    extra_heading = (
+        "Электропитание, интерфейсы и дополнительные параметры"
+        if electrical
+        else "Конструкция и материалы"
+    )
+
     headings = (
-        "Для оценки измерительных параметров указаны",
-        "Для выбора размеров и присоединения приведены",
-        "Конструктивные характеристики включают",
+        "Измерительные характеристики",
+        "Габариты, монтаж и исполнения",
+        extra_heading,
     )
 
     for heading, group in zip(headings, groups, strict=True):
