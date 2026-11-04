@@ -3,6 +3,7 @@
 from importlib.metadata import version as package_version
 
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
@@ -51,7 +52,14 @@ async def generate(request: Request) -> GenerationResult:
     """Создать черновик; синхронный SDK запускается в отдельном потоке."""
     product = await read_product_request(request)
     try:
-        return await run_in_threadpool(generate_card, product, GigaChatProvider(Settings()))
+        settings = Settings()
+    except (ValidationError, ValueError):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": LLMErrorCode.CONFIGURATION.value},
+        ) from None
+    try:
+        return await run_in_threadpool(generate_card, product, GigaChatProvider(settings))
     except LLMError as error:
         raise HTTPException(
             status_code=ERROR_HTTP_STATUS[error.code],
