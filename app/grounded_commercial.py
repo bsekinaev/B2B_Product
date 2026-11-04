@@ -4,6 +4,17 @@ import re
 
 from app.schemas import ProductInput
 
+_UNSAFE_PURPOSE_CONTEXT = re.compile(
+    r"\b(?:"
+    r"не\s+(?:для\s+измерения|предназначен\w*|использу\w*|"
+    r"применя\w*|подход\w*|пригод\w*|допуска\w*|"
+    r"рекоменд\w*|подтвержд\w*)"
+    r"|нельзя|запрещено|нет\s+данных|отсутствует\s+подтверждение"
+    r"|возможно|вероятно|предположительно|подлежит\s+уточнению"
+    r")\b",
+    flags=re.IGNORECASE,
+)
+
 
 def _source_purpose(description: str | None) -> str | None:
     """Извлечь прямо указанную задачу измерения без её расширения."""
@@ -15,8 +26,9 @@ def _source_purpose(description: str | None) -> str | None:
         if match is None:
             continue
 
-        preceding = sentence[: match.start()].casefold()
-        if "не предназначен" in preceding or "не используется" in preceding:
+        # Отрицание или неопределённость в пределах предложения
+        # запрещают превращать его в положительное утверждение.
+        if _UNSAFE_PURPOSE_CONTEXT.search(sentence):
             continue
 
         purpose = sentence[match.start() :].strip(" .")

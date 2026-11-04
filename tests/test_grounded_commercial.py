@@ -121,3 +121,76 @@ def test_generator_fallback_uses_grounded_commercial(stem: str, expected: str) -
     assert expected in (result.card.commercial_note or "")
     assert "Гарантия 25 лет" not in (result.card.commercial_note or "")
     assert result.warnings == []
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Манометр не предназначен для измерения давления.",
+        "Манометр не используется для измерения давления.",
+        "Манометр не применяется для измерения давления.",
+        "Манометр не для измерения давления.",
+        "Применение для измерения давления не подтверждено.",
+        "Не подтверждено применение для измерения давления.",
+        "Манометр нельзя применять для измерения давления.",
+        "Для измерения давления прибор не предназначен.",
+        "Манометр не рекомендован для измерения давления.",
+        "Для измерения давления устройство возможно применить.",
+        "Пригодность для измерения давления подлежит уточнению.",
+        "Для измерения давления нет данных о пригодности.",
+        "Изделие не допускается для измерения давления.",
+    ],
+)
+def test_negated_or_uncertain_purpose_is_not_asserted(
+    description: str,
+) -> None:
+    product = ProductInput(
+        name="Манометр ТЕСТ",
+        manufacturer="Тестовый завод",
+        specs={"тип": "манометр", "диапазон": "0–1 МПа"},
+        description=description,
+    )
+
+    note = grounded_commercial_note(product, ["тип", "диапазон"])
+
+    assert "предназначен для измерения давления" not in note.casefold()
+    assert "следует рассматривать" in note
+    assert product.specs == {
+        "тип": "манометр",
+        "диапазон": "0–1 МПа",
+    }
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        (
+            "Манометр предназначен для измерения давления.",
+            "для измерения давления",
+        ),
+        (
+            "Прибор не требует питания и предназначен для измерения давления.",
+            "для измерения давления",
+        ),
+        (
+            "Не предназначен для измерения температуры. Предназначен для измерения давления.",
+            "для измерения давления",
+        ),
+    ],
+)
+def test_supported_purpose_remains_available(
+    description: str,
+    expected: str,
+) -> None:
+    product = ProductInput(
+        name="Манометр ТЕСТ",
+        manufacturer="Тестовый завод",
+        specs={"тип": "манометр"},
+        description=description,
+    )
+
+    note = grounded_commercial_note(product, ["тип"])
+
+    assert expected in note
+    assert "предназначен для измерения" in note
+    assert "следует рассматривать" not in note

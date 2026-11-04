@@ -1,6 +1,11 @@
 """Точка входа HTTP API."""
 
+from importlib.metadata import version as package_version
+from threading import BoundedSemaphore
+
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import ValidationError
+from pydantic_settings.exceptions import SettingsError
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
@@ -12,7 +17,7 @@ from app.schemas import GenerationResult, ProductInput
 app = FastAPI(
     title="B2B Product Content Generator",
     description="Подготовка черновиков карточек технических товаров.",
-    version="0.1.0",
+    version=package_version("b2b-product-content-generator"),
 )
 
 
@@ -34,6 +39,23 @@ ERROR_HTTP_STATUS = {
 }
 
 
+# Один активный запрос к GigaChat в процессе — безопасная настройка для
+# GIGACHAT_API_PERS. Разрешённые B2B-потоки требуют отдельной конфигурации.
+# Важно: это процесс-локальный ограничитель, не распределённый между worker'ами.
+_GIGACHAT_PERMIT = BoundedSemaphore(value=1)
+_QUEUE_WAIT_SECONDS = 120.0
+
+
+def _generate_with_provider_slot(product: ProductInput, settings: Settings) -> GenerationResult:
+    """Удерживать слот на протяжении всех логических LLM-вызовов карточки."""
+    if not _GIGACHAT_PERMIT.acquire(timeout=_QUEUE_WAIT_SECONDS):
+        raise LLMError(LLMErrorCode.RATE_LIMITED, retryable=True)
+    try:
+        return generate_card(product, GigaChatProvider(settings))
+    finally:
+        _GIGACHAT_PERMIT.release()
+
+
 @app.post(
     "/generate",
     response_model=GenerationResult,
@@ -48,8 +70,17 @@ ERROR_HTTP_STATUS = {
 async def generate(request: Request) -> GenerationResult:
     """Создать черновик; синхронный SDK запускается в отдельном потоке."""
     product = await read_product_request(request)
+
     try:
-        return await run_in_threadpool(generate_card, product, GigaChatProvider(Settings()))
+        settings = Settings()
+    except (ValidationError, SettingsError):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": LLMErrorCode.CONFIGURATION.value},
+        ) from None
+
+    try:
+        return await run_in_threadpool(_generate_with_provider_slot, product, settings)
     except LLMError as error:
         raise HTTPException(
             status_code=ERROR_HTTP_STATUS[error.code],

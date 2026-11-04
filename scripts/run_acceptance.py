@@ -18,6 +18,7 @@ from app.schemas import ProductInput
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples" / "products"
+SUBMISSION_EXAMPLES = ROOT / "examples" / "submission" / "products"
 
 
 @dataclass(frozen=True)
@@ -38,13 +39,15 @@ OFFLINE_CASES = (
     AcceptanceCase("Короткое SEO-описание", "thermometer", "short", "requires_revision"),
 )
 LIVE_CASES = (
-    AcceptanceCase("Манометр: реальный GigaChat", "manometer", "live", None),
-    AcceptanceCase("Термометр: реальный GigaChat", "thermometer", "live", None),
+    AcceptanceCase("МЕТЕР ДМ 02: реальный GigaChat", "meter_dm02_series", "live", None),
+    AcceptanceCase("РОСМА БТ-51.211: реальный GigaChat", "rosma_bt_51_211", "live", None),
 )
 
 
 def load_product(filename: str) -> dict[str, Any]:
-    path = EXAMPLES / f"{filename}.json"
+    submission_names = {case.fixture for case in LIVE_CASES}
+    directory = SUBMISSION_EXAMPLES if filename in submission_names else EXAMPLES
+    path = directory / f"{filename}.json"
     raw = json.loads(path.read_text(encoding="utf-8"))
     return ProductInput.model_validate(raw).model_dump()
 
@@ -132,6 +135,7 @@ def run_case(client: TestClient, case: AcceptanceCase, *, live: bool) -> dict[st
         "seo_title_chars": len(card.get("seo_title") or ""),
         "seo_description_chars": len(card.get("seo_description") or ""),
         "search_queries_count": len(card.get("search_queries") or []),
+        "commercial_note_chars": len((card.get("commercial_note") or "").strip()),
         "warnings_count": len(result["warnings"]),
         "missing_fields_count": len(result["missing_fields"]),
         "editorial_review_required": True,
@@ -144,7 +148,54 @@ def run_acceptance(*, live: bool = False) -> list[dict[str, Any]]:
         return [run_case(client, case, live=live) for case in cases]
 
 
-def main() -> int:
+def content_quality_failures(row: dict[str, Any]) -> list[str]:
+    """Проверить формальную пригодность live-черновика без оценки смысла."""
+    failures = []
+
+    if row["status"] != "ready_for_review":
+        failures.append("status_not_ready_for_review")
+    if not 1 <= row["seo_title_chars"] <= 70:
+        failures.append("seo_title_length")
+    if not 800 <= row["seo_description_chars"] <= 1200:
+        failures.append("seo_description_length")
+    if not 3 <= row["search_queries_count"] <= 5:
+        failures.append("search_queries_count")
+    if row["commercial_note_chars"] < 1:
+        failures.append("commercial_note_empty")
+    if row["warnings_count"] != 0:
+        failures.append("validation_warnings")
+    if row["missing_fields_count"] != 0:
+        failures.append("missing_fields")
+    if row["specs_unchanged"] is not True:
+        failures.append("specifications_changed")
+
+    return failures
+
+
+_REPORT_FIELDS = (
+    "case",
+    "mode",
+    "http_status",
+    "status",
+    "specs_unchanged",
+    "seo_title_chars",
+    "seo_description_chars",
+    "search_queries_count",
+    "commercial_note_chars",
+    "warnings_count",
+    "missing_fields_count",
+    "editorial_review_required",
+    "content_quality",
+    "quality_failures",
+)
+
+
+def report_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Не записывать произвольные поля ответа модели или SDK."""
+    return [{key: row[key] for key in _REPORT_FIELDS if key in row} for row in rows]
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Проверка B2B-генератора через HTTP API")
     parser.add_argument(
         "--live", action="store_true", help="Два товара, до четырёх GigaChat-вызовов (квота)"
@@ -152,7 +203,7 @@ def main() -> int:
     parser.add_argument(
         "--report", action="store_true", help="Записать агрегированный отчёт в artifacts/"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         rows = run_acceptance(live=args.live)
@@ -162,6 +213,10 @@ def main() -> int:
         return 1
 
     for item in rows:
+        failures = content_quality_failures(item) if args.live else []
+        item["content_quality"] = ("FAIL" if failures else "PASS") if args.live else "NOT_EVALUATED"
+        item["quality_failures"] = failures
+
         print(
             f"[{item['mode']}] {item['case']}: HTTP {item['http_status']}; "
             f"status={item['status']}; description={item['seo_description_chars']}; "
@@ -171,10 +226,30 @@ def main() -> int:
     if args.report:
         output = ROOT / "artifacts" / "acceptance.json"
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        output.write_text(
+            json.dumps(report_rows(rows), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         print("REPORT: artifacts/acceptance.json (excluded from Git)")
 
-    print("HTTP CONTRACT: PASS; EDITORIAL QUALITY: REQUIRES HUMAN REVIEW")
+    print("HTTP_CONTRACT: PASS")
+
+    if not args.live:
+        print("CONTENT_QUALITY: NOT_EVALUATED (offline fake provider)")
+        print("HUMAN_REVIEW: REQUIRED")
+        return 0
+
+    failed = sum(bool(item["quality_failures"]) for item in rows)
+    if len(rows) != len(LIVE_CASES):
+        failed += 1
+
+    if failed:
+        print(f"CONTENT_QUALITY: FAIL (failed_cases={failed})")
+        print("HUMAN_REVIEW: REQUIRED")
+        return 2
+
+    print("CONTENT_QUALITY: PASS (formal criteria only)")
+    print("HUMAN_REVIEW: REQUIRED")
     return 0
 
 

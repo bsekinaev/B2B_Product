@@ -17,15 +17,22 @@ def grounded_seo_description(product: ProductInput) -> str | None:
     for name, value in entries:
         normalized = name.casefold()
 
-        if any(
+        # Типы выходных устройств не относятся к измерительным режимам.
+        if normalized in {"тип", "серия"} or any(
             term in normalized
             for term in (
-                "тип",
-                "серия",
                 "диапазон",
                 "класс точности",
                 "единицы шкалы",
                 "чувствительный элемент",
+                "погрешност",
+                "время опроса",
+                "время измерения",
+                "количество измерительных",
+                "количество универсальных входов",
+                "количество универсальных измерительных входов",
+                "количество каналов",
+                "входные сигналы",
             )
         ):
             groups[0].append((name, value))
@@ -37,6 +44,8 @@ def grounded_seo_description(product: ProductInput) -> str | None:
                 "резьба",
                 "присоединение",
                 "длина погружной",
+                "габариты",
+                "исполнения корпуса",
             )
         ):
             groups[1].append((name, value))
@@ -60,13 +69,25 @@ def grounded_seo_description(product: ProductInput) -> str | None:
     intro = f"{introduction}. "
     if purpose and len(purpose) <= 220:
         intro += f"{purpose}. "
-    intro += "При подборе параметры прибора сверяют с требованиями точки установки."
+    intro += "При выборе исполнения учитывают исходные характеристики и требования к подключению."
     paragraphs = [intro]
 
+    # Не называем параметры механического манометра электрическими.
+    extra_names = " ".join(name.casefold() for name, _ in groups[2])
+    electrical = any(
+        term in extra_names
+        for term in ("питание", "напряжение", "частота", "интерфейс", "протокол")
+    )
+    extra_heading = (
+        "Электропитание, интерфейсы и дополнительные параметры"
+        if electrical
+        else "Конструкция и материалы"
+    )
+
     headings = (
-        "Для оценки измерительных параметров указаны",
-        "Для выбора размеров и присоединения приведены",
-        "Конструктивные характеристики включают",
+        "Измерительные характеристики",
+        "Габариты, монтаж и исполнения",
+        extra_heading,
     )
 
     for heading, group in zip(headings, groups, strict=True):
@@ -97,7 +118,52 @@ def grounded_seo_description(product: ProductInput) -> str | None:
 
     description = "\n\n".join(paragraphs)
 
-    if not SEO_DESCRIPTION_MIN <= len(description) <= SEO_DESCRIPTION_MAX:
-        return None
+    if SEO_DESCRIPTION_MIN <= len(description) <= SEO_DESCRIPTION_MAX:
+        return description
 
-    return description
+    # Если превышен лимит, сокращаем редакторские пояснения,
+    # но сохраняем исходные технические характеристики.
+    if len(description) > SEO_DESCRIPTION_MAX:
+        shorter = paragraphs.copy()
+
+        if is_series:
+            shorter[-1] = (
+                "Параметры с пометкой «варианты серии» относятся "
+                "к разным исполнениям. Конкретную модификацию "
+                "необходимо выбрать по технической документации."
+            )
+        else:
+            shorter[-1] = (
+                "Перед заказом следует проверить параметры "
+                "конкретного исполнения по технической документации."
+            )
+
+        shorter_description = "\n\n".join(shorter)
+
+        if SEO_DESCRIPTION_MIN <= len(shorter_description) <= SEO_DESCRIPTION_MAX:
+            return shorter_description
+
+        # Для особенно насыщенных источников пробуем компактную
+        # запись без удаления названий и значений характеристик.
+        compact = [f"{introduction}."]
+
+        if purpose and len(purpose) <= 220:
+            compact[0] += f" {purpose}."
+
+        facts = "; ".join(f"{name} — {value}" for name, value in entries)
+        compact.append(f"Характеристики: {facts}.")
+
+        if is_series:
+            compact.append(
+                "Указаны варианты серии. Перед заказом необходимо "
+                "выбрать конкретную модификацию по документации."
+            )
+        else:
+            compact.append("Перед заказом необходимо проверить параметры конкретного исполнения.")
+
+        compact_description = "\n\n".join(compact)
+
+        if SEO_DESCRIPTION_MIN <= len(compact_description) <= SEO_DESCRIPTION_MAX:
+            return compact_description
+
+    return None
