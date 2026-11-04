@@ -84,13 +84,21 @@ class FakeProvider:
         )
 
 
-def test_real_manifest_has_two_initial_catalog_entries() -> None:
+def test_real_manifest_has_twenty_distinct_models() -> None:
     entries = load_manifest(ROOT)
-    assert len(entries) == 2
-    assert {entry.identifier for entry in entries} == {
-        "meter_dm02_series",
-        "rosma_bt_51_211",
-    }
+    assert len(entries) == 20
+    assert len({entry.identifier for entry in entries}) == 20
+    assert {"meter_dm02_series", "rosma_bt_51_211"}.issubset(
+        {entry.identifier for entry in entries}
+    )
+
+
+def test_catalog_inputs_have_sufficient_specs_and_sources() -> None:
+    entries = load_manifest(ROOT)
+
+    assert all(len(entry.product.specs) >= 8 for entry in entries)
+    assert all(entry.catalog_reference.startswith("https://") for entry in entries)
+    assert all(entry.source_scope in {"series", "configured_variant"} for entry in entries)
 
 
 def test_dry_run_does_not_create_results(

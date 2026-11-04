@@ -13,6 +13,114 @@
       "input_file": "examples/submission/products/rosma_bt_51_211.json",
       "catalog_reference": "https://rosma.spb.ru/termometers/seriya_211_obschetehnicheskie_tylnoe/",
       "source_scope": "configured_variant"
+    },
+    {
+      "id": "owen_2trm0",
+      "input_file": "examples/live_batch/products/owen_2trm0.json",
+      "catalog_reference": "https://owen.ru/product/2trm0/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm1",
+      "input_file": "examples/live_batch/products/owen_trm1.json",
+      "catalog_reference": "https://owen.ru/product/trm1/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_2trm1",
+      "input_file": "examples/live_batch/products/owen_2trm1.json",
+      "catalog_reference": "https://owen.ru/product/2trm1/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm10",
+      "input_file": "examples/live_batch/products/owen_trm10.json",
+      "catalog_reference": "https://owen.ru/product/trm10/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm12",
+      "input_file": "examples/live_batch/products/owen_trm12.json",
+      "catalog_reference": "https://owen.ru/product/trm12/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm500",
+      "input_file": "examples/live_batch/products/owen_trm500.json",
+      "catalog_reference": "https://docs.owen.ru/product/trm500/doc/rukovodstvo-po-ekspluatacii-trm500",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm101",
+      "input_file": "examples/live_batch/products/owen_trm101.json",
+      "catalog_reference": "https://docs.owen.ru/product/trm101/26",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm138",
+      "input_file": "examples/live_batch/products/owen_trm138.json",
+      "catalog_reference": "https://owen.ru/product/trm138",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm151",
+      "input_file": "examples/live_batch/products/owen_trm151.json",
+      "catalog_reference": "https://owen.ru/product/trm151/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm201",
+      "input_file": "examples/live_batch/products/owen_trm201.json",
+      "catalog_reference": "https://docs.owen.ru/product/trm201/32/118201",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm202",
+      "input_file": "examples/live_batch/products/owen_trm202.json",
+      "catalog_reference": "https://docs.owen.ru/product/trm202/doc/rukovodstvo-po-ekspluatacii-trm202/nastraivaemye-parametry",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm212",
+      "input_file": "examples/live_batch/products/owen_trm212.json",
+      "catalog_reference": "https://docs.owen.ru/product/trm212/39/72744",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_trm251",
+      "input_file": "examples/live_batch/products/owen_trm251.json",
+      "catalog_reference": "https://owen.ru/product/trm251/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_ukt38",
+      "input_file": "examples/live_batch/products/owen_ukt38.json",
+      "catalog_reference": "https://owen.ru/product/ukt38/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_si8",
+      "input_file": "examples/live_batch/products/owen_si8.json",
+      "catalog_reference": "https://owen.ru/product/si8",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_pd100_1x1",
+      "input_file": "examples/live_batch/products/owen_pd100_1x1.json",
+      "catalog_reference": "https://owen.ru/product/datchik_preobrazovatel_izbitochnogo_davleniya_PD100_dlya_nasosov_kotelnykh_vodosnabzheniya",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_pd150",
+      "input_file": "examples/live_batch/products/owen_pd150.json",
+      "catalog_reference": "https://agriculture.owen.ru/product/tyagonaporomer_tyagomer_perepadomer_PD150_dlya_ventsistem_kotelnyh/specifications",
+      "source_scope": "series"
+    },
+    {
+      "id": "owen_pd200",
+      "input_file": "examples/live_batch/products/owen_pd200.json",
+      "catalog_reference": "https://owen.ru/product/pd200_visokotochnii_intelektualnii_datchik_davleniay/specifications",
+      "source_scope": "series"
     }
   ]
 }
