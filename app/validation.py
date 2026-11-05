@@ -10,6 +10,7 @@ from collections.abc import Iterable
 
 from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
 from app.spec_claims import specification_claim_warnings
+from app.variant_claims import variant_claim_warnings
 
 SEO_TITLE_MAX = 70
 SEO_DESCRIPTION_MIN = 800
@@ -365,6 +366,7 @@ def validate_generated_card(
     warnings.extend(specification_claim_warnings(product, generated))
     warnings.extend(_optional_rs485_warnings(product, card))
     warnings.extend(_technical_semantics_warnings(product, card))
+    warnings.extend(variant_claim_warnings(product, card))
 
     structured_evidence = _structured_risk_evidence(product)
     for pattern, message in _RISKY_CLAIMS:
