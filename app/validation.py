@@ -131,7 +131,7 @@ _RS485_CONDITION = re.compile(
     r"|(?:в|только\s+в)\s+(?:некоторых|отдельных)"
     r"\s+(?:исполнениях|модификациях)"
     r"|не\s+во\s+всех\s+(?:исполнениях|модификациях)"
-    r"|опциональн\w*",
+    r"|\bопционал\w*",
     re.IGNORECASE,
 )
 
@@ -144,7 +144,7 @@ def _optional_rs485_warnings(
     optional = any(
         "интерфейс" in name.casefold()
         and _RS485_PATTERN.search(value)
-        and "зависит от исполнения" in value.casefold()
+        and ("зависит от исполнения" in value.casefold() or "опционал" in value.casefold())
         for name, value in product.specs.items()
     )
 
@@ -164,6 +164,119 @@ def _optional_rs485_warnings(
                 return ["RS-485 указан без ограничения по исполнению"]
 
     return []
+
+
+# Узкие проверки подтверждённых предметных дефектов.
+# Это защитные сигналы редактору, а не универсальный фактчекинг.
+
+_OUTPUT_DEVICE_GROUP = re.compile(
+    r"\b[РКСТИУ]\s*/\s*[РКСТИУ]\s*/\s*[РКСТИУ]",
+    re.IGNORECASE,
+)
+
+_OUTPUTS_AS_MODES = re.compile(
+    r"\bрежим\w*\s+(?:[РКСТИУ]\s*/\s*){2,5}[РКСТИУ]\b",
+    re.IGNORECASE,
+)
+
+_WALL_DIN_AS_ONE_MOUNT = re.compile(
+    r"\bнастенн\w*[^.!?;\n]{0,40}\(\s*Н\s*[,/]\s*DIN\s*\)",
+    re.IGNORECASE,
+)
+
+_APPLICATION_CLAIM = re.compile(
+    r"\b(?:подход\w*|предназнач\w*|применя\w*|использу\w*)\b"
+    r"[^.!?\n]{0,100}\b(?:для|в)\b[^.!?\n]*",
+    re.IGNORECASE,
+)
+
+_NEGATED_APPLICATION = re.compile(
+    r"\bне\s+(?:подход\w*|предназнач\w*|применя\w*|использу\w*)\b",
+    re.IGNORECASE,
+)
+
+_APPLICATION_TERMS = (
+    re.compile(r"\bтемператур\w*\b", re.IGNORECASE),
+    re.compile(r"\bдавлен\w*\b", re.IGNORECASE),
+    re.compile(r"\bуровн\w*\b", re.IGNORECASE),
+    re.compile(r"\bвлажност\w*\b", re.IGNORECASE),
+    re.compile(r"\bрасход\w*\b", re.IGNORECASE),
+)
+
+
+def _technical_semantics_warnings(
+    product: ProductInput,
+    card: ProductCard,
+) -> list[str]:
+    """Сигналы о конкретных неверных технических интерпретациях."""
+    warnings: list[str] = []
+    text = _all_texts(card)
+
+    output_codes_in_source = any(
+        "выходн" in name.casefold() and _OUTPUT_DEVICE_GROUP.search(value)
+        for name, value in product.specs.items()
+    )
+
+    if output_codes_in_source and _OUTPUTS_AS_MODES.search(text):
+        warnings.append("Типы выходных устройств ошибочно названы режимами")
+
+    separate_mounts_in_source = any(
+        any(term in name.casefold() for term in ("корпус", "монтаж", "исполнен"))
+        and "настенн" in value.casefold()
+        and re.search(r"\bDIN\b", value, re.IGNORECASE)
+        for name, value in product.specs.items()
+    )
+
+    if separate_mounts_in_source and _WALL_DIN_AS_ONE_MOUNT.search(text):
+        warnings.append("DIN-реечное исполнение ошибочно названо настенным")
+
+    evidence: list[str] = []
+
+    for sentence in re.split(
+        r"(?<=[.!?])\s+|\n+",
+        product.description or "",
+    ):
+        if not _NEGATED_APPLICATION.search(sentence):
+            evidence.append(sentence)
+
+    evidence_names = (
+        "тип",
+        "назначен",
+        "применен",
+        "измеряем",
+        "контролируем",
+        "область",
+        "поддерживаемые датчики",
+    )
+
+    for name, value in product.specs.items():
+        if any(term in name.casefold() for term in evidence_names):
+            evidence.append(f"{name}: {value}")
+
+    # Однозначный тип прибора подтверждает физическую величину.
+    # Это не подтверждает произвольные сценарии применения.
+    instrument_type = (f"{product.name} {product.specs.get('тип', '')}").casefold()
+
+    if "манометр" in instrument_type:
+        evidence.append("давление")
+
+    supported = "\n".join(evidence)
+
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        if _NEGATED_APPLICATION.search(sentence):
+            continue
+
+        claim = _APPLICATION_CLAIM.search(sentence)
+        if claim is None:
+            continue
+
+        if any(
+            term.search(claim.group()) and not term.search(supported) for term in _APPLICATION_TERMS
+        ):
+            warnings.append("Указана неподтверждённая область применения")
+            break
+
+    return warnings
 
 
 def validate_generated_card(
@@ -251,6 +364,7 @@ def validate_generated_card(
     # Число из другой характеристики не подтверждает техническое утверждение.
     warnings.extend(specification_claim_warnings(product, generated))
     warnings.extend(_optional_rs485_warnings(product, card))
+    warnings.extend(_technical_semantics_warnings(product, card))
 
     structured_evidence = _structured_risk_evidence(product)
     for pattern, message in _RISKY_CLAIMS:
