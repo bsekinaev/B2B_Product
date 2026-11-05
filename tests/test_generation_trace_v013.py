@@ -23,10 +23,7 @@ class SequenceProvider:
 
 
 def product() -> ProductInput:
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "examples/submission/products/rosma_bt_51_211.json"
-    )
+    path = Path(__file__).resolve().parents[1] / "examples/submission/products/rosma_bt_51_211.json"
     return ProductInput.model_validate_json(path.read_text(encoding="utf-8"))
 
 
