@@ -2,6 +2,8 @@
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -14,7 +16,14 @@ from app.llm.prompts import (
     build_refinement_prompt,
     build_user_prompt,
 )
-from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
+from app.schemas import (
+    GenerationMeta,
+    GenerationResult,
+    GenerationSource,
+    GenerationStatus,
+    ProductCard,
+    ProductInput,
+)
 from app.validation import (
     SEO_DESCRIPTION_MAX,
     SEO_DESCRIPTION_MIN,
@@ -32,6 +41,35 @@ class GeneratedText(BaseModel):
     seo_description: str
     search_queries: list[str]
     commercial_note: str
+
+
+@dataclass
+class _GenerationTrace:
+    """Фиксировать только решения генератора, не содержимое LLM-вызовов."""
+
+    seo_source: GenerationSource = GenerationSource.NONE
+    llm_attempts: int = 0
+    reason_codes: list[str] = field(default_factory=list)
+
+    def attach(self, result: GenerationResult) -> GenerationResult:
+        meta = GenerationMeta(
+            seo_source=self.seo_source,
+            llm_attempts=self.llm_attempts,
+            reason_codes=self.reason_codes.copy(),
+        )
+        return result.model_copy(update={"generation_meta": meta})
+
+
+class _CountingProvider:
+    """Считать логические вызовы generate_text, включая неудачные."""
+
+    def __init__(self, delegate: GigaChatProvider, trace: _GenerationTrace) -> None:
+        self.delegate = delegate
+        self.trace = trace
+
+    def generate_text(self, **kwargs: Any) -> str:
+        self.trace.llm_attempts += 1
+        return self.delegate.generate_text(**kwargs)
 
 
 class DuplicateJSONKey(ValueError):
@@ -90,7 +128,11 @@ def _complete_commercial_note(
     return validate_generated_card(product, updated, missing_fields=missing)
 
 
-def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> GenerationResult:
+def _generate_model_card(
+    product: ProductInput,
+    provider: GigaChatProvider,
+    trace: _GenerationTrace,
+) -> GenerationResult:
     """Собрать черновик и провести независимую проверку качества."""
     specifications = dict(product.specs)
     missing = [f"specs.{name}" for name, value in product.specs.items() if not value]
@@ -99,6 +141,7 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
     # Без заполненных характеристик генерация недостоверна.
     # Описание само по себе не оправдывает обращение к LLM.
     if not any(value for value in product.specs.values()):
+        trace.reason_codes.append("insufficient_specs")
         missing.append("specs")
         if not product.description:
             missing.append("description")
@@ -121,6 +164,7 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
     except LLMError as exc:
         if exc.code != LLMErrorCode.BAD_RESPONSE:
             raise
+        trace.reason_codes.append("invalid_llm_json")
         return GenerationResult(
             status=GenerationStatus.REQUIRES_REVISION,
             card=card,
@@ -128,6 +172,7 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
             warnings=["Модель вернула некорректный структурированный ответ"],
         )
 
+    trace.seo_source = GenerationSource.INITIAL_LLM
     card = ProductCard(
         seo_title=_grounded_seo_title(product, generated.seo_title),
         seo_description=generated.seo_description,
@@ -150,6 +195,12 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
     if not should_revise:
         return _complete_commercial_note(product, first, missing)
 
+    if first_length < SEO_DESCRIPTION_MIN:
+        trace.reason_codes.append("seo_too_short")
+    if needs_commercial:
+        trace.reason_codes.append("commercial_missing")
+    trace.reason_codes.append("refinement_requested")
+
     try:
         revised_raw = provider.generate_text(
             system_prompt=SYSTEM_PROMPT,
@@ -161,6 +212,7 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
         revised = parse_model_json(revised_raw)
     except LLMError:
         # Первый корректный черновик остаётся доступен даже при сбое доработки.
+        trace.reason_codes.append("refinement_failed")
         return _complete_commercial_note(product, first, missing)
 
     revised_length = len(revised.seo_description.strip())
@@ -169,6 +221,7 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
     improved_description = revised_length > first_length
     improved_commercial = needs_commercial and bool(revised.commercial_note.strip())
     if not description_not_worse or not (improved_description or improved_commercial):
+        trace.reason_codes.append("refinement_rejected")
         return _complete_commercial_note(product, first, missing)
 
     revised_card = ProductCard(
@@ -183,7 +236,10 @@ def _generate_model_card(product: ProductInput, provider: GigaChatProvider) -> G
     # Не выбирать более длинный ответ ценой новых ошибок или рекламных
     # обещаний. Полноценную смысловую достоверность проверяет редактор.
     if set(candidate.warnings) - set(first.warnings):
+        trace.reason_codes.append("refinement_rejected")
         return _complete_commercial_note(product, first, missing)
+    trace.seo_source = GenerationSource.REFINED_LLM
+    trace.reason_codes.append("refinement_selected")
     return _complete_commercial_note(product, candidate, missing)
 
 
@@ -192,21 +248,24 @@ def generate_card(
     provider: GigaChatProvider,
 ) -> GenerationResult:
     """Использовать LLM, затем проверенный fallback при неудаче."""
-    result = _generate_model_card(product, provider)
+    trace = _GenerationTrace()
+    result = _generate_model_card(product, _CountingProvider(provider, trace), trace)
 
     if result.status != GenerationStatus.REQUIRES_REVISION:
-        return result
+        return trace.attach(result)
 
     description = grounded_seo_description(product)
     if description is None:
-        return result
+        trace.reason_codes.append("fallback_unavailable")
+        return trace.attach(result)
 
     title = f"{product.name} — характеристики"
     if len(title) > SEO_TITLE_MAX:
         title = product.name
 
     if len(title) > SEO_TITLE_MAX:
-        return result
+        trace.reason_codes.append("fallback_unavailable")
+        return trace.attach(result)
 
     spec_names = list(product.specs)
     priority = (
@@ -238,7 +297,8 @@ def generate_card(
     ]
 
     if len({" ".join(q.split()).casefold() for q in queries}) != 3:
-        return result
+        trace.reason_codes.append("fallback_unavailable")
+        return trace.attach(result)
 
     commercial = grounded_commercial_note(product, relevant_names[:3])
 
@@ -253,6 +313,9 @@ def generate_card(
     candidate = validate_generated_card(product, card, missing_fields=result.missing_fields)
 
     if candidate.status == GenerationStatus.READY_FOR_REVIEW:
-        return candidate
+        trace.seo_source = GenerationSource.FALLBACK
+        trace.reason_codes.append("fallback_selected")
+        return trace.attach(candidate)
 
-    return result
+    trace.reason_codes.append("fallback_rejected")
+    return trace.attach(result)
