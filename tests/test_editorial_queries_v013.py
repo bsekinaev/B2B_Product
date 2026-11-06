@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from app.generator import generate_card
-from app.grounded_queries import grounded_search_queries
+from app.grounded_queries import _search_identity, grounded_search_queries
 from app.schemas import GenerationSource, GenerationStatus, ProductInput
+from app.variant_scope import VariantScope, variant_scope
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = json.loads((ROOT / "examples/live_batch/manifest.json").read_text(encoding="utf-8"))
@@ -50,7 +51,7 @@ def test_query_set_is_grounded_and_unique(item: dict) -> None:
 
     assert 3 <= len(queries) <= 5
     assert len(normalized) == len(set(normalized))
-    assert queries[0] == product.name
+    assert queries[0] == _search_identity(product)
     assert product.specs == specs
 
     for query in queries:
@@ -59,10 +60,13 @@ def test_query_set_is_grounded_and_unique(item: dict) -> None:
         assert "доставка" not in query.casefold()
         assert "скидка" not in query.casefold()
 
-    is_series = any("варианты серии" in value.casefold() for value in product.specs.values())
-    variant_query = f"{product.name} варианты исполнения"
+    scope = variant_scope(product)
+    identity = _search_identity(product)
+    variant_query = f"{identity} варианты исполнения"
+    article_query = f"{identity} подбор артикула"
 
-    assert (variant_query in queries) == is_series
+    assert (variant_query in queries) == (scope == VariantScope.EXPLICIT_ALTERNATIVES)
+    assert (article_query in queries) == (scope == VariantScope.STATUS_ONLY)
 
 
 @pytest.mark.parametrize("item", ITEMS, ids=[item["id"] for item in ITEMS])
@@ -99,8 +103,8 @@ def test_category_prioritizes_selection_attribute(
     product = load(item)
     queries = grounded_search_queries(product)
 
-    assert f"{product.name} {attribute}" in queries
-    assert f"{product.name} тип" not in queries
+    assert f"{_search_identity(product)} {attribute}" in queries
+    assert f"{_search_identity(product)} тип" not in queries
 
 
 def test_optional_interface_is_not_claimed_unconditionally() -> None:

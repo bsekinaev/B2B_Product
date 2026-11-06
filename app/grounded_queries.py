@@ -1,7 +1,10 @@
 """Поисковые запросы из идентификаторов и подтверждённых параметров."""
 
+import re
+
 from app.grounded_copy import _editorial_category
 from app.schemas import ProductInput
+from app.variant_scope import VariantScope, variant_scope
 
 _CATEGORY_PRIORITIES = {
     "pressure_gauge": (
@@ -49,6 +52,12 @@ def _normalize_query(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
+def _search_identity(product: ProductInput) -> str:
+    """Убрать только служебный суффикс «(серия)», не меняя модель."""
+    result = re.sub(r"\s*\(\s*серия\s*\)\s*$", "", product.name, flags=re.I).strip()
+    return result or product.name.strip()
+
+
 def grounded_search_queries(product: ProductInput) -> list[str]:
     """Создать до пяти запросов без вымышленных характеристик.
 
@@ -80,20 +89,23 @@ def grounded_search_queries(product: ProductInput) -> list[str]:
     names.sort(key=rank)
 
     kind = product.specs.get("тип", "").strip()
-    series = any("варианты серии" in value.casefold() for value in product.specs.values())
+    identity = _search_identity(product)
+    scope = variant_scope(product)
 
-    candidates = [product.name]
+    candidates = [identity]
 
     if kind and "варианты серии" not in kind.casefold():
         candidates.append(f"{product.manufacturer} {kind}")
 
-    candidates.append(f"{product.name} характеристики")
+    candidates.append(f"{identity} характеристики")
 
     if names:
-        candidates.append(f"{product.name} {names[0]}")
+        candidates.append(f"{identity} {names[0]}")
 
-    if series:
-        candidates.append(f"{product.name} варианты исполнения")
+    if scope == VariantScope.EXPLICIT_ALTERNATIVES:
+        candidates.append(f"{identity} варианты исполнения")
+    elif scope == VariantScope.STATUS_ONLY:
+        candidates.append(f"{identity} подбор артикула")
 
     queries: list[str] = []
     seen: set[str] = set()
