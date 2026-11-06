@@ -2,6 +2,7 @@
 
 import re
 
+from app.editorial_priorities import ranked_spec_names
 from app.grounded_copy import _editorial_category
 from app.schemas import ProductInput
 from app.variant_scope import VariantScope, variant_scope
@@ -87,6 +88,10 @@ def grounded_search_queries(product: ProductInput) -> list[str]:
         return priority, positions[name]
 
     names.sort(key=rank)
+    if category == "controller":
+        preferred = ranked_spec_names(product.specs, category, limit=1)
+        if preferred:
+            names = preferred + [name for name in names if name not in preferred]
 
     kind = product.specs.get("тип", "").strip()
     identity = _search_identity(product)

@@ -1,5 +1,6 @@
 """Проверяемая сборка SEO из характеристик без новых технических фактов."""
 
+from app.editorial_priorities import ranked_spec_names
 from app.schemas import ProductInput
 from app.validation import SEO_DESCRIPTION_MAX, SEO_DESCRIPTION_MIN
 from app.variant_scope import VariantScope, variant_scope
@@ -79,6 +80,13 @@ def _editorial_selection(
         "controller": "измерительного прибора",
         "generic": "оборудования",
     }
+
+    if _editorial_category(product) == "controller":
+        # Отбираем значимые поля из источника, а не первые из групп.
+        preferred = ranked_spec_names(product.specs, "controller", limit=2)
+        if len(preferred) == 2:
+            criteria = " и ".join(f"«{name}»" for name in preferred)
+            return f"При подборе измерительного прибора сверяют {criteria}."
 
     selected: list[str] = []
 

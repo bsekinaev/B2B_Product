@@ -2,6 +2,7 @@
 
 import re
 
+from app.editorial_priorities import ranked_spec_names
 from app.grounded_copy import _editorial_category
 from app.schemas import ProductInput
 from app.variant_scope import VariantScope, variant_scope
@@ -91,6 +92,11 @@ def _commercial_parameters(
     selection_names: list[str],
     category: str,
 ) -> list[str]:
+    if category == "controller":
+        preferred = ranked_spec_names(product.specs, category, limit=3)
+        if preferred:
+            return preferred
+
     # Only provided, nonempty source specifications are eligible.
     candidates = list(
         dict.fromkeys(
