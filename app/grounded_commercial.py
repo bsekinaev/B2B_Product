@@ -4,6 +4,7 @@ import re
 
 from app.grounded_copy import _editorial_category
 from app.schemas import ProductInput
+from app.variant_scope import VariantScope, variant_scope
 
 _UNSAFE_PURPOSE_CONTEXT = re.compile(
     r"\b(?:"
@@ -139,6 +140,12 @@ def _commercial_closing(
             "Для серии необходимо уточнить конкретное "
             "исполнение и предел измерения "
             "по технической документации."
+        )
+
+    if variant_scope(product) == VariantScope.STATUS_ONLY:
+        return (
+            "Для серии не выбран конкретный артикул. Перед заказом "
+            "сверяют параметры исполнения по документации изготовителя."
         )
 
     endings = {

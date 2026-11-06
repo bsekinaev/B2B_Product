@@ -2,6 +2,7 @@
 
 from app.schemas import ProductInput
 from app.validation import SEO_DESCRIPTION_MAX, SEO_DESCRIPTION_MIN
+from app.variant_scope import VariantScope, variant_scope
 
 
 def _editorial_category(product: ProductInput) -> str:
@@ -148,6 +149,15 @@ def _editorial_conclusion(
             "generic": ("Параметры конкретного исполнения проверяют по технической документации."),
         }
         return endings[category]
+
+    if variant_scope(product) == VariantScope.STATUS_ONLY:
+        # The source only identifies a series without selecting an article.
+        # No individual specification was marked as an alternative.
+        return (
+            "Карточка относится к серии без выбранного артикула. "
+            "Характеристики конкретного исполнения проверяют "
+            "по документации изготовителя."
+        )
 
     variant_names = [
         name
@@ -508,7 +518,12 @@ def grounded_seo_description(product: ProductInput) -> str | None:
     if len(description) > SEO_DESCRIPTION_MAX:
         shorter = paragraphs.copy()
 
-        if is_series:
+        if is_series and variant_scope(product) == VariantScope.STATUS_ONLY:
+            shorter[-1] = (
+                "Карточка относится к серии без выбранного артикула. "
+                "Параметры исполнения уточняют по технической документации."
+            )
+        elif is_series:
             shorter[-1] = (
                 "Параметры с пометкой «варианты серии» относятся "
                 "к разным исполнениям. Конкретную модификацию "
@@ -535,7 +550,12 @@ def grounded_seo_description(product: ProductInput) -> str | None:
         facts = "; ".join(f"{name} — {value}" for name, value in entries)
         compact.append(f"Характеристики: {facts}.")
 
-        if is_series:
+        if is_series and variant_scope(product) == VariantScope.STATUS_ONLY:
+            compact.append(
+                "Серия представлена без выбранного артикула; его параметры "
+                "уточняют по документации."
+            )
+        elif is_series:
             compact.append(
                 "Указаны варианты серии. Перед заказом необходимо "
                 "выбрать конкретную модификацию по документации."
