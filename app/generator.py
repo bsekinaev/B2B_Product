@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.grounded_commercial import grounded_commercial_note
 from app.grounded_copy import grounded_seo_description
+from app.grounded_queries import grounded_search_queries
 from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
 from app.llm.prompts import (
     DRAFT_RESPONSE_FORMAT,
@@ -291,14 +292,9 @@ def generate_card(
         return position, spec_names.index(name)
 
     relevant_names = sorted(spec_names, key=relevance)
-    kind = product.specs.get("тип", "")
-    queries = [
-        product.name,
-        f"{product.manufacturer} {kind or product.name}",
-        f"{product.name} {relevant_names[0]}",
-    ]
+    queries = grounded_search_queries(product)
 
-    if len({" ".join(q.split()).casefold() for q in queries}) != 3:
+    if not 3 <= len(queries) <= 5:
         trace.reason_codes.append("fallback_unavailable")
         return trace.attach(result)
 
