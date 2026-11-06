@@ -129,6 +129,54 @@ def _complete_commercial_note(
     return validate_generated_card(product, updated, missing_fields=missing)
 
 
+def _quarantine_commercial_draft(
+    product: ProductInput,
+    result: GenerationResult,
+    missing: list[str],
+    trace: _GenerationTrace,
+) -> GenerationResult:
+    """Keep valid model SEO for manual editing, never auto-approve a risky answer.
+
+    Unlike v1, an unsupported commercial claim always remains a BLOCKING
+    requires_revision. The generated note is replaced with a source-grounded
+    candidate, but the original validation warnings are retained as evidence.
+    """
+    if result.status != GenerationStatus.REQUIRES_REVISION:
+        return result
+    if not result.warnings or result.missing_fields:
+        return result
+    if len(product.specs) < 8 or not product.description:
+        return result
+    if not (result.card.commercial_note or "").strip():
+        return result
+
+    seo = (result.card.seo_description or "").strip()
+    if not SEO_DESCRIPTION_MIN <= len(seo) <= SEO_DESCRIPTION_MAX:
+        return result
+
+    grounded = grounded_commercial_note(product, list(product.specs)[:3])
+    if grounded == result.card.commercial_note:
+        return result
+
+    candidate = validate_generated_card(
+        product,
+        result.card.model_copy(update={"commercial_note": grounded}),
+        missing_fields=missing,
+    )
+    if candidate.status != GenerationStatus.READY_FOR_REVIEW or candidate.warnings:
+        return result
+
+    # Preserve original warning categories for audit/security. The warnings
+    # explicitly refer to the original LLM answer, not to the repaired draft.
+    trace.reason_codes.append("commercial_quarantined")
+    return GenerationResult(
+        status=GenerationStatus.REQUIRES_REVISION,
+        card=candidate.card,
+        missing_fields=result.missing_fields.copy(),
+        warnings=[f"Исходный коммерческий блок модели: {warning}" for warning in result.warnings],
+    )
+
+
 def _generate_model_card(
     product: ProductInput,
     provider: GigaChatProvider,
@@ -182,6 +230,13 @@ def _generate_model_card(
         specifications=specifications,
     )
     first = validate_generated_card(product, card, missing_fields=missing)
+
+    # LLM-01 v2: preserve a safe-to-edit SEO draft, but NEVER lift the
+    # blocking status of unsupported claims in the original model answer.
+    if first.status == GenerationStatus.REQUIRES_REVISION:
+        quarantined = _quarantine_commercial_draft(product, first, missing, trace)
+        if "commercial_quarantined" in trace.reason_codes:
+            return quarantined
 
     # Один ограниченный редакторский повтор, но только когда есть материал
     # для расширения. Он НЕ является повтором сетевой ошибки SDK.
@@ -253,6 +308,11 @@ def generate_card(
     trace = _GenerationTrace()
     counted_provider = _CountingProvider(provider, trace)
     result = _generate_model_card(product, counted_provider, trace)
+
+    # A quarantined draft stays requires_revision. The editorial user must
+    # approve/replace it; no automatic fallback may silently clear its warning.
+    if "commercial_quarantined" in trace.reason_codes:
+        return trace.attach(result)
 
     if result.status != GenerationStatus.REQUIRES_REVISION:
         return trace.attach(result)
