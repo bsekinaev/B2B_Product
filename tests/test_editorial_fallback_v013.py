@@ -89,7 +89,10 @@ def test_dense_controller_compact_layout_preserves_facts() -> None:
 
     assert description is not None
     assert 800 <= len(description) <= 1200
-    assert "Характеристики:" in description
+    assert "Характеристики:" not in description
+    assert "Измерительные характеристики:" in description
+    assert "Выходы и управление:" in description
+    assert "Электропитание, интерфейсы и дополнительные параметры:" in description
 
     for name, value in product.specs.items():
         assert f"{name} — {value.strip()}" in description

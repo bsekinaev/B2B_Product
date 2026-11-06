@@ -197,6 +197,159 @@ def _editorial_conclusion(
     return opening + endings[category]
 
 
+"""V013-04E-F1: structured safe SEO layout. Production insertion candidate."""
+
+_SECTIONS = (
+    "measurement",
+    "outputs",
+    "mechanical",
+    "electrical",
+    "construction",
+    "execution",
+    "other",
+)
+
+
+def _seo_section(name: str) -> str:
+    """Map SOURCE spec name to a reader-facing block; do not infer values."""
+    n = name.casefold()
+    if n == "статус исполнения":
+        return "execution"
+    # Order matters: connector terms precede electrical output terms.
+    if any(
+        t in n
+        for t in (
+            "присоедин",
+            "штуцер",
+            "резьб",
+            "габарит",
+            "диаметр",
+            "расположение",
+            "погружной части",
+            "исполнения корпуса",
+            "тип корпуса",
+            "соединител",
+        )
+    ):
+        return "mechanical"
+    if any(
+        t in n
+        for t in (
+            "питани",
+            "потребляемая мощность",
+            "встроенный источник",
+            "ток встроенного источника",
+        )
+    ):
+        return "electrical"
+    if any(t in n for t in ("интерфейс", "протокол")):
+        return "electrical"
+    if any(t in n for t in ("выход", "реле", "коммутируемый ток", "сигнализац")):
+        return "outputs"
+    if any(t in n for t in ("материал", "защит", "температура", "гидрозаполнени")):
+        return "construction"
+    if n in {"тип", "серия", "единицы шкалы", "чувствительный элемент"} or any(
+        t in n
+        for t in (
+            "диапазон",
+            "предел",
+            "погрешност",
+            "класс точности",
+            "вход",
+            "датчик",
+            "канал",
+            "время опроса",
+            "время измерения",
+            "время измер",
+            "минимальное время опроса",
+            "перенастройка диапазона",
+        )
+    ):
+        return "measurement"
+    return "other"
+
+
+def _seo_section_labels(category: str) -> dict[str, str]:
+    measuring = {
+        "pressure_gauge": "Диапазоны и точность измерения",
+        "thermometer": "Измерительные показатели",
+        "pressure_transmitter": "Диапазоны и погрешности",
+    }.get(category, "Измерительные характеристики")
+    mechanical = {
+        "pressure_gauge": "Корпус, присоединение и размеры",
+        "thermometer": "Монтаж, погружная часть и размеры",
+        "pressure_transmitter": "Присоединения и конструкция",
+    }.get(category, "Габариты, монтаж и исполнения")
+    return {
+        "measurement": measuring,
+        "outputs": "Выходы и управление",
+        "mechanical": mechanical,
+        "electrical": "Электропитание, интерфейсы и дополнительные параметры",
+        "construction": "Конструкция и материалы"
+        if category in {"pressure_gauge", "thermometer"}
+        else "Материалы, защита и условия",
+        "execution": "Исполнение",
+        "other": "Дополнительные характеристики",
+    }
+
+
+def _structured_seo_fallback(product, entries) -> str | None:
+    """Full semantic grouping followed by lean source-preserving variants."""
+    category = _editorial_category(product)
+    # Preserve the original source-aware expansion for terse thermometer inputs.
+    if category == "thermometer" and len(product.description or "") < 85:
+        return None
+    groups = {key: [] for key in _SECTIONS}
+    for name, value in entries:
+        groups[_seo_section(name)].append((name, value))
+    # Avoid accidentally pairing IP protection with the material of a sleeve.
+    # IP is a property of the named housing, not of a nearby protective sleeve.
+    # Place casing protection before sleeve materials. Keep every source pair intact.
+    groups["construction"].sort(
+        key=lambda pair: (
+            0 if "степен" in pair[0].casefold() and "защит" in pair[0].casefold() else 1
+        )
+    )
+
+    labels = _seo_section_labels(category)
+    introduction = (
+        product.name
+        if product.manufacturer.casefold() in product.name.casefold()
+        else f"{product.name} ({product.manufacturer})"
+    )
+    purpose = (product.description or "").strip().split(". ", 1)[0].strip(" .")
+    intro = f"{introduction}." + (f" {purpose}." if purpose and len(purpose) <= 220 else "")
+    # Do not claim all options are present in a specific device.
+    series = any("варианты серии" in v.casefold() for _, v in entries)
+    sections = [
+        f"{labels[key]}: " + "; ".join(f"{name} — {value}" for name, value in groups[key]) + "."
+        for key in _SECTIONS
+        if groups[key]
+    ]
+    short_end = (
+        "Перед заказом уточняют исполнение по документации."
+        if series
+        else "Параметры конкретного изделия сверяют по документации."
+    )
+    full_end = _editorial_conclusion(product, entries, series)
+    # Prefer a real introduction and concrete sections; eliminate editorial
+    # filler first if the source is dense, without deleting specification pairs.
+    selection_groups = [groups["measurement"], groups["mechanical"], groups["construction"]]
+    selection = _editorial_selection(product, selection_groups)
+    attempts = [
+        [f"{intro} {selection}", *sections, full_end],
+        [f"{intro} {selection}", *sections, short_end],
+        [intro, *sections, full_end],
+        [intro, *sections, short_end],
+        [intro, *sections],
+    ]
+    for parts in attempts:
+        text = "\n\n".join(parts)
+        if SEO_DESCRIPTION_MIN <= len(text) <= SEO_DESCRIPTION_MAX:
+            return text
+    return None
+
+
 def grounded_seo_description(product: ProductInput) -> str | None:
     """Собрать текст только при достаточной полноте исходных параметров."""
     if any(not value.strip() for value in product.specs.values()):
@@ -205,6 +358,11 @@ def grounded_seo_description(product: ProductInput) -> str | None:
     entries = [(key, value.strip()) for key, value in product.specs.items()]
     if len(entries) < 8:
         return None
+
+    # V013-04E-F1: semantic sectioning before legacy fallback.
+    structured = _structured_seo_fallback(product, entries)
+    if structured is not None:
+        return structured
 
     groups: list[list[tuple[str, str]]] = [[], [], []]
     for name, value in entries:
