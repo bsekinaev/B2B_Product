@@ -242,9 +242,10 @@ def _generate_model_card(
     # для расширения. Он НЕ является повтором сетевой ошибки SDK.
     first_length = len((card.seo_description or "").strip())
     needs_commercial = not (card.commercial_note or "").strip()
+    needs_shortening = first_length > SEO_DESCRIPTION_MAX
     should_revise = (
         first.status == GenerationStatus.REQUIRES_REVISION
-        and (first_length < SEO_DESCRIPTION_MIN or needs_commercial)
+        and (first_length < SEO_DESCRIPTION_MIN or needs_shortening or needs_commercial)
         and sum(bool(value) for value in product.specs.values()) >= 3
         and bool(product.description)
     )
@@ -253,6 +254,8 @@ def _generate_model_card(
 
     if first_length < SEO_DESCRIPTION_MIN:
         trace.reason_codes.append("seo_too_short")
+    if needs_shortening:
+        trace.reason_codes.append("seo_too_long")
     if needs_commercial:
         trace.reason_codes.append("commercial_missing")
     trace.reason_codes.append("refinement_requested")
@@ -261,7 +264,10 @@ def _generate_model_card(
         revised_raw = provider.generate_text(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=build_refinement_prompt(
-                product, first_length, need_commercial=needs_commercial
+                product,
+                first_length,
+                need_commercial=needs_commercial,
+                overlong=needs_shortening,
             ),
             response_format=deepcopy(DRAFT_RESPONSE_FORMAT),
         )
@@ -274,7 +280,9 @@ def _generate_model_card(
     revised_length = len(revised.seo_description.strip())
     min_acceptable = SEO_DESCRIPTION_MIN if first_length >= SEO_DESCRIPTION_MIN else first_length
     description_not_worse = min_acceptable <= revised_length <= SEO_DESCRIPTION_MAX
-    improved_description = revised_length > first_length
+    improved_description = revised_length > first_length or (
+        needs_shortening and SEO_DESCRIPTION_MIN <= revised_length <= SEO_DESCRIPTION_MAX
+    )
     improved_commercial = needs_commercial and bool(revised.commercial_note.strip())
     if not description_not_worse or not (improved_description or improved_commercial):
         trace.reason_codes.append("refinement_rejected")
@@ -288,6 +296,12 @@ def _generate_model_card(
         specifications=specifications,
     )
     candidate = validate_generated_card(product, revised_card, missing_fields=missing)
+
+    # An overlong draft is accepted only if the revised response passes ALL
+    # existing checks. Never trade a length fix for unsupported claims.
+    if needs_shortening and candidate.status != GenerationStatus.READY_FOR_REVIEW:
+        trace.reason_codes.append("refinement_rejected")
+        return _complete_commercial_note(product, first, missing)
 
     # Не выбирать более длинный ответ ценой новых ошибок или рекламных
     # обещаний. Полноценную смысловую достоверность проверяет редактор.
