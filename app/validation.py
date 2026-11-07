@@ -8,6 +8,7 @@
 import re
 from collections.abc import Iterable
 
+from app.editorial_claims import editorial_claim_warnings
 from app.schemas import GenerationResult, GenerationStatus, ProductCard, ProductInput
 from app.spec_claims import specification_claim_warnings
 from app.variant_claims import variant_claim_warnings
@@ -384,6 +385,7 @@ def validate_generated_card(
     warnings.extend(_optional_rs485_warnings(product, card))
     warnings.extend(_technical_semantics_warnings(product, card))
     warnings.extend(variant_claim_warnings(product, card))
+    warnings.extend(editorial_claim_warnings(product, card))
 
     # The immersion length is not necessarily the protective sleeve length.
     # Preserve component attribution unless the sleeve length is explicit.
