@@ -101,6 +101,26 @@ class ProductCard(BaseModel):
     commercial_note: str | None = None
 
 
+class GenerationSource(StrEnum):
+    """Фактически выбранный источник SEO-текста."""
+
+    INITIAL_LLM = "initial_llm"
+    REFINED_LLM = "refined_llm"
+    LLM_GROUNDED = "llm_grounded"
+    FALLBACK = "fallback"
+    NONE = "none"
+
+
+class GenerationMeta(BaseModel):
+    """Маршрут генерации без промптов и секретов."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seo_source: GenerationSource
+    llm_attempts: int = Field(ge=0)
+    reason_codes: list[str] = Field(default_factory=list)
+
+
 class GenerationResult(BaseModel):
     """JSON-ответ сервиса с результатом и причинами ограничений."""
 
@@ -110,3 +130,4 @@ class GenerationResult(BaseModel):
     card: ProductCard
     missing_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    generation_meta: GenerationMeta | None = None
