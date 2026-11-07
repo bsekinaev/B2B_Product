@@ -71,11 +71,7 @@ class CatalogSource(BaseModel):
         """Не принимать ссылки с секретами, фрагментами и неверной схемой."""
         if value is None:
             return None
-        if (
-            not value
-            or len(value) > 2048
-            or any(c.isspace() or ord(c) < 32 for c in value)
-        ):
+        if not value or len(value) > 2048 or any(c.isspace() or ord(c) < 32 for c in value):
             raise ValueError("Недопустимый адрес источника")
         try:
             parts = urlsplit(value)
