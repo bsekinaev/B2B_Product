@@ -9,10 +9,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import StrEnum
+from typing import Annotated, Self
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
-from typing import Annotated, Self
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from app.schemas import ProductInput
 
@@ -65,7 +72,11 @@ class CatalogSource(BaseModel):
         """Не принимать ссылки с секретами, фрагментами и неверной схемой."""
         if value is None:
             return None
-        if not value or len(value) > 2048 or any(c.isspace() or ord(c) < 32 for c in value):
+        if (
+            not value
+            or len(value) > 2048
+            or any(c.isspace() or ord(c) < 32 for c in value)
+        ):
             raise ValueError("Недопустимый адрес источника")
         try:
             parts = urlsplit(value)
