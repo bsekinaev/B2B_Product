@@ -310,7 +310,11 @@ def _generate_model_card(
         return _complete_commercial_note(product, first, missing)
 
     trace.seo_source = GenerationSource.REFINED_LLM
-    trace.reason_codes.append("refinement_selected")
+    trace.reason_codes.append(
+        "refinement_selected"
+        if candidate.status == GenerationStatus.READY_FOR_REVIEW
+        else "refinement_partial"
+    )
     return _complete_commercial_note(product, candidate, missing)
 
 

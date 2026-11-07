@@ -14,6 +14,8 @@ _OPTIONAL = re.compile(
     r"|опционал\w*|вариант\w*\s+серии",
     re.IGNORECASE,
 )
+_UNQUALIFIED_INTERFACE_PAIR = re.compile(r"\bHART\b\s+и\s+RS[\s\-–—]*485\b", re.IGNORECASE)
+
 _SIMULTANEOUS = re.compile(
     r"одновременн\w*|оба\s+интерфейса"
     r"|в\s+одной\s+(?:модификации|конфигурации|исполнении)",
@@ -102,7 +104,10 @@ def variant_claim_warnings(
     if interface_options and any(
         _HART.search(sentence)
         and _RS485.search(sentence)
-        and _SIMULTANEOUS.search(sentence)
+        and (
+            _SIMULTANEOUS.search(sentence)
+            or (_UNQUALIFIED_INTERFACE_PAIR.search(sentence) and not _OPTIONAL.search(sentence))
+        )
         and not _NEGATED_SIMULTANEOUS.search(sentence)
         for sentence in sentences
     ):

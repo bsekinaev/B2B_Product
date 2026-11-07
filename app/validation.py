@@ -20,6 +20,8 @@ SEARCH_QUERIES_MAX = 5
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 _SLEEVE_IP = re.compile(r"гильз\w*[^.!?\n]{0,45}\bIP\d{2}\b", re.I)
+_IP_CODE = re.compile(r"\bIP\d{2}\b", re.I)
+_IP_EXPLANATION = re.compile(r"защит\w*\s+от\s+(?:пыли|вод\w*|струй\w*|брызг\w*|влаг\w*)", re.I)
 _WORD = re.compile(r"[^\W\d_]{4,}", re.UNICODE)
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
@@ -71,6 +73,17 @@ def _all_texts(card: ProductCard) -> str:
             card.commercial_note or "",
         ]
     )
+
+
+def _unsupported_ip_explanation_warnings(product: ProductInput, card: ProductCard) -> list[str]:
+    """Не выводить смысл IP-кода без явного подтверждения в specs."""
+    source = "\n".join(f"{key}: {value}" for key, value in product.specs.items())
+    if _IP_EXPLANATION.search(source):
+        return []
+    for sentence in re.split(r"[.!?;\n]+", _all_texts(card)):
+        if _IP_CODE.search(sentence) and _IP_EXPLANATION.search(sentence):
+            return ["Расшифровка степени защиты IP не подтверждена характеристиками"]
+    return []
 
 
 def _original_facts(product: ProductInput) -> str:
@@ -367,6 +380,7 @@ def validate_generated_card(
     warnings.extend(_optional_rs485_warnings(product, card))
     warnings.extend(_technical_semantics_warnings(product, card))
     warnings.extend(variant_claim_warnings(product, card))
+    warnings.extend(_unsupported_ip_explanation_warnings(product, card))
 
     structured_evidence = _structured_risk_evidence(product)
     for pattern, message in _RISKY_CLAIMS:
