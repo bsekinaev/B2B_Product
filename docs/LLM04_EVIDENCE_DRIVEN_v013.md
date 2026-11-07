@@ -1,27 +1,41 @@
-# LLM-04: evidence-driven improvements after real GigaChat trial
+# LLM-04 — исправления по результатам реального испытания GigaChat
 
-Baseline commit: `4a8419cec59d115920ca512bdf821cf2eb1b6f57`, branch `feat/v013-editorial-quality`.
+**Базовый коммит:** `4a8419cec59d115920ca512bdf821cf2eb1b6f57`.
+**Ветка разработки:** `feat/v013-editorial-quality`.
+**Дата доказательств:** 7 ноября 2026 года.
 
-## Evidence (2026-11-07)
+> Исторический отчёт о реализации LLM-04. В версии 0.1.3 изменения уже объединены с `main`. Актуальные результаты технической приёмки — в [отчёте v0.1.3](ACCEPTANCE_v0.1.3.md).
 
-Six real structured GigaChat replies for three products all parsed as valid JSON, but none passed the model-only validation. SEO lengths: РОСМА 635/665; ОВЕН ТРМ202 732/876; ОВЕН ПД200 732/794. End-user `ready_for_review` resulted from fallback, not model SEO.
+## Основание для исправлений
 
-- The model frequently returned SEO below the 800-character minimum.
-- The refined ТРМ202 response included speculative applications and mentioned certificates despite the source lacking them.
-- The model combined alternative HART and RS-485 interfaces without an execution qualifier.
-- Model responses expanded IP54/IP65 into water/dust properties absent from structured specifications; IP54 was even connected to jets, which is technically inappropriate.
-- ROSMA `refinement_selected` was traced even though the selected draft was still short and immediately replaced by fallback; `refinement_partial` now distinguishes that event.
+Из шести реальных структурированных ответов GigaChat для трёх товаров все шесть содержали корректный JSON, однако ни один не прошёл самостоятельную валидацию модельного текста. Длины SEO-описаний:
 
-## Changes
+| Товар | Первый ответ | Второй ответ |
+|---|---:|---:|
+| РОСМА БТ-51.211 | 635 | 665 |
+| ОВЕН ТРМ202 | 732 | 876 |
+| ОВЕН ПД200 | 732 | 794 |
 
-- **Prompt:** precise 4-paragraph length plan only for rich product specifications; no meaningless padding or invented facts; separate reminders not to invent IP interpretations, interface compatibility, certificates or guarantees.
-- **Refinement:** more concrete target lengths and warning language for 8+ facts, only one existing refinement call, unchanged structured JSON schema.
-- **IP guard:** conservatively reject a model's explicit IP water/dust interpretation when source `specs` does not support the explanation. Listing `IP54`/`IP65` without interpretation remains allowed. This is *not* a general standards fact checker.
-- **Variant guard:** when source shows HART / RS-485 as alternatives, flag unqualified `HART и RS-485` as possible simultaneous compatibility. Qualified `варианты серии` and explicit negations remain allowed.
-- **Trace:** `refinement_partial` replaces `refinement_selected` only when the selected refined draft still has `requires_revision`.
+В каждом случае итоговый статус `ready_for_review` достигался через резервную генерацию (`fallback`), а не за счёт принятия SEO-текста модели.
 
-## Acceptance
+- GigaChat часто возвращал текст короче обязательных 800 символов.
+- Повторный ответ для ТРМ202 содержал неподтверждённые сценарии применения и упоминание сертификатов, отсутствующих в источнике.
+- Модель объединяла альтернативные интерфейсы HART и RS-485 без указания на разные исполнения.
+- Ответы раскрывали свойства классов IP54/IP65 без подтверждения в структурированных характеристиках; IP54 приписывалась защита от струй воды, что технически некорректно.
+- Трассировка РОСМА ранее отмечала `refinement_selected`, хотя второй ответ оставался коротким и впоследствии заменялся резервным текстом. Теперь такие случаи отличает `refinement_partial`.
 
-1. All existing tests remain green, new negative tests pass, Ruff PASS, branch coverage >=95% and HTTP offline acceptance PASS.
-2. `main` unchanged; no GigaChat calls, no historic JSON rewrites, no commit/push from patch installer.
-3. Next: deploy/commit on feature branch after checks, then *separate* 3-product live A/B trial with new reports. Prompts alone do not prove a quality improvement; 4/5 editorial score still requires human review.
+## Реализованные изменения
+
+- **Промпт:** конкретная структура из четырёх абзацев для товаров с подробными характеристиками. Запрещено искусственно увеличивать объём за счёт вымышленных сведений.
+- **Редакторский повтор:** уточнены целевая длина и ограничения для источников с восемью и более заполненными характеристиками. Сохранены один редакторский повтор и прежняя строгая JSON-схема.
+- **Классы защиты IP:** блокируется неподтверждённая расшифровка степени защиты корпуса. Указание `IP54` или `IP65` без дополнительных интерпретаций допускается. Это не универсальная проверка стандартов.
+- **Варианты интерфейсов:** при альтернативных HART/RS-485 блокируется безусловное перечисление, которое может быть прочитано как совместимость в одной модификации. Формулировки о вариантах серии допускаются.
+- **Трассировка:** `refinement_partial` применяется вместо `refinement_selected`, если выбранный повторный черновик по-прежнему имеет статус `requires_revision`.
+
+## Приёмка и ограничения
+
+Изменения сопровождались негативными регрессионными тестами, Ruff, проверкой покрытия ветвлений не ниже 95% и офлайн-приёмкой HTTP API. На этапе установки исторические JSON и `main` не менялись.
+
+После LLM-04 были проведены дополнительные реальные испытания LLM-05 и LLM-07, затем внедрены защиты LLM-08. Технический итог объединён с `main` в версии **0.1.3**.
+
+**Достичь и подтвердить редакторскую оценку ≥4/5 этими проверками не удалось.** Все карточки требуют ручной проверки, автоматическая публикация не предусмотрена.

@@ -15,7 +15,7 @@ from app.llm.client import GigaChatProvider, LLMError, LLMErrorCode
 from app.schemas import GenerationResult, ProductInput
 
 app = FastAPI(
-    title="B2B Product Content Generator",
+    title="Генератор B2B-карточек товаров",
     description="Подготовка черновиков карточек технических товаров.",
     version=package_version("b2b-product-content-generator"),
 )
