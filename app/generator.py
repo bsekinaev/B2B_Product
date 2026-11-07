@@ -25,6 +25,7 @@ from app.schemas import (
     ProductCard,
     ProductInput,
 )
+from app.seo_completion import complete_short_seo
 from app.validation import (
     SEO_DESCRIPTION_MAX,
     SEO_DESCRIPTION_MIN,
@@ -237,6 +238,32 @@ def _generate_model_card(
         quarantined = _quarantine_commercial_draft(product, first, missing, trace)
         if "commercial_quarantined" in trace.reason_codes:
             return quarantined
+
+    # LLM-06: a near-target draft may lack only characters, not technical facts.
+    # Keep every original LLM word, append only sourced details, then revalidate.
+    # Never auto-repair an answer with other warnings or missing fields.
+    length_warning = (
+        f"SEO-описание должно содержать {SEO_DESCRIPTION_MIN}–{SEO_DESCRIPTION_MAX} символов"
+    )
+    if (
+        first.status == GenerationStatus.REQUIRES_REVISION
+        and first.warnings == [length_warning]
+        and not first.missing_fields
+        and bool(product.description)
+        and bool((card.commercial_note or "").strip())
+    ):
+        completion = complete_short_seo(product, card.seo_description or "")
+        if completion is not None:
+            candidate = validate_generated_card(
+                product,
+                card.model_copy(update={"seo_description": completion}),
+                missing_fields=missing,
+            )
+            if candidate.status == GenerationStatus.READY_FOR_REVIEW and not candidate.warnings:
+                trace.seo_source = GenerationSource.LLM_GROUNDED
+                trace.reason_codes.append("seo_grounded_completion")
+                return candidate
+            trace.reason_codes.append("seo_grounded_completion_rejected")
 
     # Один ограниченный редакторский повтор, но только когда есть материал
     # для расширения. Он НЕ является повтором сетевой ошибки SDK.

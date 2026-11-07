@@ -106,6 +106,7 @@ class GenerationSource(StrEnum):
 
     INITIAL_LLM = "initial_llm"
     REFINED_LLM = "refined_llm"
+    LLM_GROUNDED = "llm_grounded"
     FALLBACK = "fallback"
     NONE = "none"
 

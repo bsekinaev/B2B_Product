@@ -20,6 +20,10 @@ SEARCH_QUERIES_MAX = 5
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 _SLEEVE_IP = re.compile(r"гильз\w*[^.!?\n]{0,45}\bIP\d{2}\b", re.I)
+_SLEEVE_AS_IMMERSION_LENGTH = re.compile(
+    r"\bгильз\w*[^.!?;\n]{0,25}\bдлин(?:ой|а|у|ы)\s+\d+(?:[.,]\d+)?\s*мм",
+    re.I,
+)
 _IP_CODE = re.compile(r"\bIP\d{2}\b", re.I)
 _IP_EXPLANATION = re.compile(r"защит\w*\s+от\s+(?:пыли|вод\w*|струй\w*|брызг\w*|влаг\w*)", re.I)
 _WORD = re.compile(r"[^\W\d_]{4,}", re.UNICODE)
@@ -380,6 +384,16 @@ def validate_generated_card(
     warnings.extend(_optional_rs485_warnings(product, card))
     warnings.extend(_technical_semantics_warnings(product, card))
     warnings.extend(variant_claim_warnings(product, card))
+
+    # The immersion length is not necessarily the protective sleeve length.
+    # Preserve component attribution unless the sleeve length is explicit.
+    has_immersion_length = any("длина погружной части" in name.casefold() for name in product.specs)
+    has_sleeve_length = any(
+        "длина" in name.casefold() and "гильз" in name.casefold() for name in product.specs
+    )
+    if has_immersion_length and not has_sleeve_length:
+        if _SLEEVE_AS_IMMERSION_LENGTH.search(generated):
+            warnings.append("Длина погружной части ошибочно приписана защитной гильзе")
     warnings.extend(_unsupported_ip_explanation_warnings(product, card))
 
     structured_evidence = _structured_risk_evidence(product)
